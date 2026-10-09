@@ -26,12 +26,66 @@ class WardrobeItem {
     required this.name,
     required this.category,
     required this.imagePath,
+    this.brand = '',
   });
 
   final String name;
   final String category;
   final String imagePath;
+
+  /// Optional maker label, rendered as `Category • Brand` under the name.
+  final String brand;
 }
+
+/// Catalog shown on the Wardrobe screen, grouped by the chips below.
+const wardrobeItems = <WardrobeItem>[
+  WardrobeItem(
+    name: 'Silk Blouse',
+    category: 'Tops',
+    brand: 'Zara',
+    imagePath: 'assets/images/silk_blouse.jpg',
+  ),
+  WardrobeItem(
+    name: 'Beige Trench',
+    category: 'Outerwear',
+    brand: 'Burberry',
+    imagePath: 'assets/images/beige_trench.jpg',
+  ),
+  WardrobeItem(
+    name: 'Classic Sneakers',
+    category: 'Shoes',
+    brand: 'Nike',
+    imagePath: 'assets/images/classic_sneakers.jpg',
+  ),
+  WardrobeItem(
+    name: 'Gold Link Chain',
+    category: 'Accessories',
+    brand: 'Mejuri',
+    imagePath: 'assets/images/gold_link_chain.jpg',
+  ),
+  WardrobeItem(
+    name: 'Straight Leg Jeans',
+    category: 'Bottoms',
+    brand: "Levi's",
+    imagePath: 'assets/images/straight_leg_jeans.jpg',
+  ),
+  WardrobeItem(
+    name: 'Linen Shirt',
+    category: 'Tops',
+    brand: 'Uniqlo',
+    imagePath: 'assets/images/linen_shirt.jpg',
+  ),
+];
+
+/// Chip labels: the leading chip clears the category filter.
+const wardrobeCategories = <String>[
+  'All Items',
+  'Tops',
+  'Bottoms',
+  'Outerwear',
+  'Shoes',
+  'Accessories',
+];
 
 /// Sample content for the static home screen.
 const todaysLook = Look(
