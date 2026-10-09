@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/wardrobe.dart';
+import '../screens/wardrobe_item_detail_screen.dart';
 import '../theme/app_theme.dart';
 import 'placeholder_image.dart';
 
@@ -14,7 +15,11 @@ class WardrobeItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => showComingSoon(context, item.name),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WardrobeItemDetailScreen(item: item),
+        ),
+      ),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(

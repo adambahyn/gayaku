@@ -17,7 +17,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Wardrobe'), findsWidgets);
-    expect(find.text('Total 6 items'), findsOneWidget);
+    expect(find.text('Total 9 items'), findsOneWidget);
     expect(find.text('Silk Blouse'), findsOneWidget);
     expect(find.text('Tops • Zara'), findsOneWidget);
 

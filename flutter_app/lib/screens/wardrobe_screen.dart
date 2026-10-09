@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../logic/outfit_matcher.dart';
 import '../models/wardrobe.dart';
+import '../state/outfit_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import '../widgets/placeholder_image.dart';
 import '../widgets/wardrobe_item_card.dart';
 import 'add_item_stub.dart';
+import 'outfit_builder_screen.dart';
 
-/// Wardrobe catalog: header, search, category chips and a two-column grid.
+/// Wardrobe hub with two tabs: the item catalog and the saved combinations.
 ///
-/// UI only — the chips and search box hold local state, nothing is persisted.
+/// UI only — chips, search and combinations live in local state / an in-memory
+/// store; nothing is persisted.
 class WardrobeScreen extends StatefulWidget {
   const WardrobeScreen({super.key, this.items = wardrobeItems});
 
@@ -22,6 +26,7 @@ class WardrobeScreen extends StatefulWidget {
 
 class _WardrobeScreenState extends State<WardrobeScreen> {
   String _category = wardrobeCategories.first;
+  int _tab = 0;
 
   void _onNavTap(int index) {
     switch (index) {
@@ -38,13 +43,52 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
   }
 
+  Future<void> _openBuilder({SavedOutfit? existing}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OutfitBuilderScreen(existing: existing),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(SavedOutfit outfit) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cream,
+        title: Text(
+          'Hapus kombinasi?',
+          style: GoogleFonts.playfairDisplay(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: AppColors.espresso,
+          ),
+        ),
+        content: Text(
+          '"${outfit.name}" akan dihapus dari daftar.',
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.taupe),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (ok ?? false) deleteOutfit(outfit.id);
+  }
+
   List<WardrobeItem> get _visible => _category == wardrobeCategories.first
       ? widget.items
       : widget.items.where((i) => i.category == _category).toList();
 
   @override
   Widget build(BuildContext context) {
-    final items = _visible;
     return Scaffold(
       backgroundColor: AppColors.cream,
       body: SafeArea(
@@ -57,37 +101,17 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _Header(itemCount: widget.items.length),
-                    const SizedBox(height: 20),
-                    const _SearchRow(),
                     const SizedBox(height: 16),
-                    _CategoryChips(
-                      selected: _category,
-                      onSelected: (c) => setState(() => _category = c),
+                    ValueListenableBuilder(
+                      valueListenable: savedOutfits,
+                      builder: (context, outfits, _) => _TabToggle(
+                        tab: _tab,
+                        outfitCount: outfits.length,
+                        onChanged: (t) => setState(() => _tab = t),
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    if (items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: Center(
-                          child: Text(
-                            'Nothing in this category yet.',
-                            style: TextStyle(color: AppColors.taupe),
-                          ),
-                        ),
-                      )
-                    else
-                      GridView.count(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 14,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.75,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          for (final item in items)
-                            WardrobeItemCard(item: item),
-                        ],
-                      ),
+                    if (_tab == 0) ..._catalogTab() else ..._outfitTab(),
                   ],
                 ),
               ),
@@ -100,6 +124,92 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _catalogTab() {
+    final items = _visible;
+    return [
+      const _SearchRow(),
+      const SizedBox(height: 16),
+      _CategoryChips(
+        selected: _category,
+        onSelected: (c) => setState(() => _category = c),
+      ),
+      const SizedBox(height: 16),
+      if (items.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'Nothing in this category yet.',
+              style: TextStyle(color: AppColors.taupe),
+            ),
+          ),
+        )
+      else
+        GridView.count(
+          crossAxisCount: 2,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.75,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [for (final item in items) WardrobeItemCard(item: item)],
+        ),
+    ];
+  }
+
+  List<Widget> _outfitTab() {
+    return [
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: () => _openBuilder(),
+          icon: const Icon(Icons.add, size: 20),
+          label: Text(
+            'Buat Kombinasi',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.espresso,
+            foregroundColor: AppColors.cream,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(18)),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      ValueListenableBuilder(
+        valueListenable: savedOutfits,
+        builder: (context, outfits, _) {
+          if (outfits.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  'Belum ada kombinasi tersimpan.',
+                  style: TextStyle(color: AppColors.taupe),
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: [
+              for (final outfit in outfits) ...[
+                _SavedOutfitCard(
+                  outfit: outfit,
+                  onEdit: () => _openBuilder(existing: outfit),
+                  onDelete: () => _confirmDelete(outfit),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+          );
+        },
+      ),
+    ];
   }
 }
 
@@ -146,6 +256,194 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Segmented switch between the catalog and the saved combinations.
+class _TabToggle extends StatelessWidget {
+  const _TabToggle({
+    required this.tab,
+    required this.outfitCount,
+    required this.onChanged,
+  });
+
+  final int tab;
+  final int outfitCount;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.all(Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          _segment('Katalog', 0),
+          _segment('Kombinasi ($outfitCount)', 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(String label, int index) {
+    final active = tab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(index),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: active ? AppColors.tan : Colors.transparent,
+            borderRadius: const BorderRadius.all(Radius.circular(20)),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+              color: active ? Colors.white : AppColors.taupe,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SavedOutfitCard extends StatelessWidget {
+  const _SavedOutfitCard({
+    required this.outfit,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final SavedOutfit outfit;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = outfit.items;
+    final percent = (outfitScore(items) * 100).round();
+    final threshold = (outfit.threshold * 100).round();
+    final meets = percent >= threshold;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.all(Radius.circular(22)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.espresso.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  outfit.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.espresso,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Edit kombinasi',
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                color: AppColors.espresso,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.beige,
+                  minimumSize: const Size(38, 38),
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'Hapus kombinasi',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                color: AppColors.espresso,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.beige,
+                  minimumSize: const Size(38, 38),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (final item in items) ...[
+                ClipRRect(
+                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: PlaceholderImage(
+                      imagePath: item.imagePath,
+                      icon: Icons.checkroom_outlined,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: meets ? AppColors.espresso : AppColors.beige,
+                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                ),
+                child: Text(
+                  '$percent%',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: meets ? AppColors.cream : AppColors.espresso,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  meets
+                      ? 'Memenuhi batas $threshold%'
+                      : 'Di bawah batas $threshold%',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: AppColors.taupe,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
