@@ -47,6 +47,7 @@ void main() {
     expect(find.text('Kombinasi (0)'), findsOneWidget);
     await tester.tap(find.text('Kombinasi (0)'));
     await tester.pumpAndSettle();
+    expect(find.text('Semua'), findsOneWidget);
     expect(find.text('Buat Kombinasi'), findsOneWidget);
     expect(find.text('Belum ada kombinasi tersimpan.'), findsOneWidget);
 

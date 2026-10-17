@@ -15,9 +15,16 @@ import 'outfit_builder_screen.dart';
 /// UI only — search, filters and combinations live in local state / an
 /// in-memory store; nothing is persisted.
 class WardrobeScreen extends StatefulWidget {
-  const WardrobeScreen({super.key, this.items = wardrobeItems});
+  const WardrobeScreen({
+    super.key,
+    this.items = wardrobeItems,
+    this.initialTab = 0,
+    this.initialFavoritesOnly = false,
+  });
 
   final List<WardrobeItem> items;
+  final int initialTab;
+  final bool initialFavoritesOnly;
 
   @override
   State<WardrobeScreen> createState() => _WardrobeScreenState();
@@ -29,8 +36,15 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   String _query = '';
   Set<String> _occasions = {};
   int _minFormality = 1;
-  int _tab = 0;
-  bool _favoritesOnly = false;
+  late int _tab;
+  late bool _favoritesOnly;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = widget.initialTab;
+    _favoritesOnly = widget.initialFavoritesOnly;
+  }
 
   @override
   void dispose() {
