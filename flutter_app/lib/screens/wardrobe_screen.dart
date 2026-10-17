@@ -30,6 +30,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   Set<String> _occasions = {};
   int _minFormality = 1;
   int _tab = 0;
+  bool _favoritesOnly = false;
 
   @override
   void dispose() {
@@ -230,15 +231,26 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         ),
       ),
       const SizedBox(height: 16),
+      _SavedOutfitFilters(
+        favoritesOnly: _favoritesOnly,
+        onFavoritesOnlyChanged: (value) =>
+            setState(() => _favoritesOnly = value),
+      ),
+      const SizedBox(height: 16),
       ValueListenableBuilder(
         valueListenable: savedOutfits,
         builder: (context, outfits, _) {
-          if (outfits.isEmpty) {
+          final visibleOutfits = _favoritesOnly
+              ? outfits.where((outfit) => outfit.favorite).toList()
+              : outfits;
+          if (visibleOutfits.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
                 child: Text(
-                  'Belum ada kombinasi tersimpan.',
+                  _favoritesOnly
+                      ? 'Belum ada favorit tersimpan.'
+                      : 'Belum ada kombinasi tersimpan.',
                   style: textTheme.bodyLarge!.copyWith(fontWeight: FontWeight.w400, color: palette.inkMuted),
                 ),
               ),
@@ -246,7 +258,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           }
           return Column(
             children: [
-              for (final outfit in _favoritesFirst(outfits)) ...[
+              for (final outfit in _favoritesFirst(visibleOutfits)) ...[
                 _SavedOutfitCard(
                   outfit: outfit,
                   onEdit: () => _openBuilder(existing: outfit),
@@ -267,6 +279,36 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     ...outfits.where((o) => o.favorite),
     ...outfits.where((o) => !o.favorite),
   ];
+}
+
+class _SavedOutfitFilters extends StatelessWidget {
+  const _SavedOutfitFilters({
+    required this.favoritesOnly,
+    required this.onFavoritesOnlyChanged,
+  });
+
+  final bool favoritesOnly;
+  final ValueChanged<bool> onFavoritesOnlyChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _Chip(
+          label: 'Semua',
+          selected: !favoritesOnly,
+          onTap: () => onFavoritesOnlyChanged(false),
+        ),
+        _Chip(
+          label: 'Favorit',
+          selected: favoritesOnly,
+          onTap: () => onFavoritesOnlyChanged(true),
+        ),
+      ],
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
