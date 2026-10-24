@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'register_screen.dart';
@@ -14,6 +15,30 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  /// True while a sign-in request is in flight, so a double tap cannot send two.
+  bool _busy = false;
+
+  Future<void> _signIn() async {
+    setState(() => _busy = true);
+    try {
+      await authService.signIn(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -160,11 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Tombol Sign In
                       ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const HomeScreen()),
-                          );
-                        },
+                        onPressed: _busy ? null : _signIn,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: palette.ink,
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -229,8 +250,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             icon: Icons.g_mobiledata,
                             color: palette.ink,
                             onTap: () {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                              // Needs a Google OAuth client + redirect URL in the
+                              // Supabase dashboard; until then say so instead of
+                              // pretending the user is signed in.
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Google Sign-In is not connected yet.',
+                                  ),
+                                ),
                               );
                             },
                           ),
