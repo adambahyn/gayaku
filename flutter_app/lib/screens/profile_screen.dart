@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../navigation.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import 'login_screen.dart';
@@ -15,6 +16,15 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = 'Isabella';
+
+  @override
+  void initState() {
+    super.initState();
+    // A signed-in user's name comes from the auth backend; the mockup name is
+    // only a fallback for the demo backend.
+    final name = authService.currentUser?.displayName ?? '';
+    if (name.isNotEmpty) _userName = name;
+  }
 
   // State sederhana untuk contoh pengaturan
   bool _darkMode = false;
@@ -220,7 +230,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ListTile(
                 leading: Icon(Icons.email_outlined, color: palette.accentInk),
                 title: Text('Email', style: TextStyle(fontSize: 12, color: palette.inkMuted)),
-                subtitle: Text('isabella@gayaku.id', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: palette.ink)),
+                subtitle: Text(
+                  authService.currentUser?.email.isNotEmpty == true
+                      ? authService.currentUser!.email
+                      : 'isabella@gayaku.id',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: palette.ink),
+                ),
               ),
               ListTile(
                 leading: Icon(Icons.phone_outlined, color: palette.accentInk),
@@ -461,7 +476,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               actions: [
                                 TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
                                 TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
+                                    await authService.signOut();
+                                    if (!context.mounted) return;
                                     Navigator.pop(dialogContext);
                                     Navigator.pushAndRemoveUntil(
                                       context,
@@ -512,8 +529,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     required VoidCallback onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(color: palette.sheet, borderRadius: BorderRadius.circular(16)),
+    return Material(
+      color: palette.sheet,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Container(
