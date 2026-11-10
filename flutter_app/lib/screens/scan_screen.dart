@@ -149,7 +149,7 @@ class _ScanScreenState extends State<ScanScreen> {
       final directory =
           await (widget.documentsDirectory ??
               getApplicationDocumentsDirectory)();
-      final folder = Directory('${directory.path}/garments');
+      final folder = Directory('${directory.path}/$wardrobeCutoutDirName');
       await folder.create(recursive: true);
       final cutout = File('${folder.path}/$id.png');
       await cutout.writeAsBytes(result.cutoutPng);
