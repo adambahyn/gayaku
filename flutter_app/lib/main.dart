@@ -1,10 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
+import 'services/outfit_service.dart';
 import 'services/wardrobe_service.dart';
+import 'state/outfit_store.dart';
+import 'state/planner_store.dart';
+import 'state/wardrobe_store.dart';
+import 'state/wardrobe_sync.dart';
 import 'theme/app_theme.dart';
 
 /// Compile-time credentials, so no secret ever sits in the repo:
@@ -20,16 +28,40 @@ Future<void> main() async {
   // different face at runtime.
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  // Without credentials the app runs on DemoAuthService, so the UI is still
-  // usable before a Supabase project exists.
+  // The wardrobe is a database, not a constant: read it before the first frame
+  // so the home and wardrobe screens never flash an empty catalog.
+  await initWardrobeStore();
+
+  // ponytail: SQLite is what the screens read today; Supabase is the shared
+  // copy behind the same service seam. Without credentials the app runs on
+  // DemoAuthService/DemoWardrobeService, so the UI still works before a
+  // project exists - see supabase/README.md for the switch-over.
   if (_supabaseUrl.isNotEmpty && _supabaseKey.isNotEmpty) {
-    await Supabase.initialize(url: _supabaseUrl, publishableKey: _supabaseKey);
-    final client = Supabase.instance.client;
-    useAuthService(SupabaseAuthService(client));
-    useWardrobeService(SupabaseWardrobeService(client));
+    try {
+      await Supabase.initialize(
+        url: _supabaseUrl,
+        publishableKey: _supabaseKey,
+      );
+      final client = Supabase.instance.client;
+      useAuthService(SupabaseAuthService(client));
+      useWardrobeService(SupabaseWardrobeService(client));
+      useOutfitService(SupabaseOutfitService(client));
+      usePlannerService(SupabasePlannerService(client));
+    } catch (_) {
+      // Wrong URL or no network at launch: demo services keep the UI usable
+      // instead of leaving the splash screen up forever.
+    }
   }
 
   runApp(const GayakuApp());
+
+  // Supabase is the shared wardrobe and SQLite is the offline copy. Fired after
+  // the first frame, not awaited: the token refresh retries with backoff, so a
+  // slow or dead network used to hold the splash screen for over a minute. The
+  // notifier fills in when the rows arrive.
+  unawaited(loadWardrobeFromBackend());
+  unawaited(loadOutfitsFromBackend());
+  unawaited(loadPlannerFromBackend());
 }
 
 class GayakuApp extends StatelessWidget {
@@ -42,7 +74,11 @@ class GayakuApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      home: const LoginScreen(),
+      // A stored session still starts on its own: opening the app on the login
+      // form while the token is alive made every relaunch look like a logout.
+      home: authService.currentUser == null
+          ? const LoginScreen()
+          : const HomeScreen(),
     );
   }
 }

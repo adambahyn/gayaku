@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Beige placeholder box with a centered icon, layered behind an
-/// [AssetImage] so the layout works before photo assets are supplied.
-/// Missing assets fall back to the placeholder via [errorBuilder].
+/// Beige placeholder box with a centered icon, layered behind the garment
+/// photo so the layout works before photo assets are supplied.
+///
+/// [imagePath] is either a bundled asset (`assets/images/…`) or the absolute
+/// path of a scanned cutout in the app documents directory. Missing files fall
+/// back to the placeholder via `errorBuilder`.
 class PlaceholderImage extends StatelessWidget {
   const PlaceholderImage({
     super.key,
@@ -15,6 +20,7 @@ class PlaceholderImage extends StatelessWidget {
   });
 
   final String imagePath;
+
   final IconData icon;
   final BoxFit fit;
   final Color? color;
@@ -28,26 +34,20 @@ class PlaceholderImage extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Center(child: Icon(icon, size: 28, color: palette.accentInk)),
-          Image.asset(
-            imagePath,
-            fit: fit,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
+          if (File(imagePath).isAbsolute)
+            Image.file(
+              File(imagePath),
+              fit: fit,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            )
+          else
+            Image.asset(
+              imagePath,
+              fit: fit,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
         ],
       ),
     );
   }
-}
-
-void showComingSoon(BuildContext context, String label) {
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text('$label coming soon')));
-}
-
-/// Plain transient message — validation and other real (non-stub) feedback.
-void showNote(BuildContext context, String message) {
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
 }

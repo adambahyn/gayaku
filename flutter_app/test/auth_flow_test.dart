@@ -27,6 +27,13 @@ class _FailingAuthService implements AuthService {
 
   @override
   Future<void> signOut() async {}
+
+  @override
+  Future<void> requestPasswordReset(String email) async {}
+
+  @override
+  Future<AuthUser> updateDisplayName(String name) async =>
+      throw const AuthException('Sesi habis, masuk ulang.');
 }
 
 void main() {
@@ -81,7 +88,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await authService.signIn(email: 'isabella@gayaku.id', password: 'rahasia123');
+    await authService.signIn(
+      email: 'isabella@gayaku.id',
+      password: 'rahasia123',
+    );
 
     await tester.pumpWidget(const MaterialApp(home: ProfileScreen()));
     expect(find.text('isabella'), findsOneWidget);
