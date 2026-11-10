@@ -130,6 +130,12 @@ class WardrobeItem {
   );
 }
 
+/// Folder under the app documents dir that holds a scanned garment's cutout
+/// PNG. The scanner writes here and the wardrobe service reads from here; when
+/// they disagreed (`garments` vs `cutouts`) every saved item pointed at a file
+/// that did not exist and the wardrobe showed only its attributes.
+const wardrobeCutoutDirName = 'garments';
+
 /// Category slots a combination is built from.
 const wardrobeSlots = <String>[
   'Tops',

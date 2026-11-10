@@ -61,9 +61,9 @@ Future<void> addWardrobeItem(WardrobeItem item) async {
 }
 
 /// Rewrites the cache to match [remote] exactly: rows the backend no longer
-/// has are dropped, new ones are inserted, existing ones keep their local
-/// `image_path`. Without the delete half an account that once held seeded demo
-/// garments keeps showing them forever — the seed rows are not on the server.
+/// has are dropped, everything else is re-written from the server rows. Without
+/// the delete half an account that once held seeded demo garments keeps showing
+/// them forever — those rows are not on the server.
 Future<void> mirrorWardrobeCache(List<WardrobeItem> remote) async {
   final db = _requireDb();
   final ids = [for (final item in remote) item.id];
@@ -78,7 +78,7 @@ Future<void> mirrorWardrobeCache(List<WardrobeItem> remote) async {
       await txn.insert(
         _table,
         _toRow(item),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
+        conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
   });

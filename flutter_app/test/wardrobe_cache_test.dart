@@ -23,7 +23,7 @@ void main() {
     id: id,
     name: name,
     category: 'Tops',
-    imagePath: '/cutouts/$id.png',
+    imagePath: '/garments/$id.png',
   );
 
   test('mirroring the backend drops rows the server no longer has', () async {
@@ -52,7 +52,7 @@ void main() {
     expect(wardrobeItems.value, isEmpty);
   });
 
-  test('a cached row keeps its local image path and colour', () async {
+  test('the server row wins over a stale cached copy', () async {
     await initWardrobeStore(
       factory: databaseFactoryFfi,
       path: '${temp.path}/wardrobe.db',
@@ -69,8 +69,10 @@ void main() {
 
     await mirrorWardrobeCache([item('real-1')]);
 
+    // The cached row points at the wrong folder and has a colour the server
+    // never stored; mirroring must overwrite both.
     final row = wardrobeItems.value.single;
-    expect(row.imagePath, '/cutouts/real-1.png');
-    expect(row.color, const Color(0xFF102030));
+    expect(row.imagePath, '/garments/real-1.png');
+    expect(row.color, const Color(0xFFD3A277));
   });
 }
