@@ -102,6 +102,41 @@ void main() {
     expect(wardrobeItems.value, isEmpty);
   });
 
+  test('deleteWardrobeItems drops the whole selection in one pass', () async {
+    await initWardrobeStore(factory: databaseFactoryFfi, path: dbPath);
+
+    final gone = [
+      WardrobeItem(
+        id: newWardrobeItemId(),
+        name: 'Kaos Hitam',
+        category: 'Tops',
+        imagePath: '${tempDir.path}/cutouts/hitam.png',
+      ),
+      WardrobeItem(
+        id: newWardrobeItemId(),
+        name: 'Jeans Biru',
+        category: 'Bottoms',
+        imagePath: '${tempDir.path}/cutouts/biru.png',
+      ),
+    ];
+    final kept = WardrobeItem(
+      id: newWardrobeItemId(),
+      name: 'Jaket Denim',
+      category: 'Outerwear',
+      imagePath: '${tempDir.path}/cutouts/denim.png',
+    );
+    for (final item in [...gone, kept]) {
+      await addWardrobeItem(item);
+    }
+
+    await deleteWardrobeItems(gone.map((item) => item.id));
+
+    expect(wardrobeItems.value.map((item) => item.id), [kept.id]);
+    // An empty selection must not fall through to a DELETE without a WHERE.
+    await deleteWardrobeItems(const []);
+    expect(wardrobeItems.value, hasLength(1));
+  });
+
   test('two garments may share a name under different ids', () async {
     await initWardrobeStore(factory: databaseFactoryFfi, path: dbPath);
 

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/wardrobe.dart';
 import '../services/wardrobe_service.dart';
 import 'wardrobe_store.dart';
@@ -9,6 +11,10 @@ import 'wardrobe_store.dart';
 /// ponytail: a remote item is not mirrored into SQLite, so the first launch
 /// without a network shows the cache only. Mirror on read when offline stops
 /// meaning "demo".
+
+/// True while the last sync succeeded. The wardrobe screen shows a stale-data
+/// banner off this instead of pretending an empty list is an empty wardrobe.
+final wardrobeOnline = ValueNotifier<bool>(true);
 
 /// Replaces the catalog with the owner's rows. No-op on the demo backend, and a
 /// failed fetch leaves the local cache in place rather than blanking the UI.
@@ -26,8 +32,10 @@ Future<void> loadWardrobeFromBackend() async {
       // No store open (a bare widget test): show the backend rows anyway.
       wardrobeItems.value = remote;
     }
+    wardrobeOnline.value = true;
   } catch (_) {
     // Offline or signed out: keep what the file already holds.
+    wardrobeOnline.value = false;
   }
 }
 
@@ -43,4 +51,12 @@ Future<void> saveWardrobeItem(WardrobeItem item) async {
 Future<void> removeWardrobeItem(String id) async {
   await wardrobeService.remove(id);
   await deleteWardrobeItem(id);
+}
+
+/// Same order for a selection: one backend call, one local statement.
+Future<void> removeWardrobeItems(Iterable<String> ids) async {
+  final list = ids.toList();
+  if (list.isEmpty) return;
+  await wardrobeService.removeMany(list);
+  await deleteWardrobeItems(list);
 }
