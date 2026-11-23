@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'color_theory_helper.dart';
 import '../models/wardrobe.dart';
 
 /// Color harmony between two garments on the HSV color wheel.
@@ -68,24 +69,134 @@ class MatchSuggestion {
   int get percent => (score * 100).round();
 }
 
-/// Weighted compatibility: color harmony 50%, formality closeness 30%,
-/// shared occasion 20% — the content-based scoring from the proposal (§6.2).
-/// Returns 0 for a pair that must not be worn together.
-double pairScore(WardrobeItem a, WardrobeItem b) {
-  if (identical(a, b) || a.name == b.name) return 0;
-  if (!canPair(a, b)) return 0;
+class PairSubscores {
+  const PairSubscores({
+    required this.color,
+    required this.formality,
+    required this.occasion,
+  });
 
-  final harmony = harmonyOf(a.color, b.color);
-  final gap = (a.formality - b.formality).abs();
-  final shared = a.occasions.where(b.occasions.contains).length;
-
-  return harmony.score * 0.5 +
-      (1 - gap / 4).clamp(0.0, 1.0) * 0.3 +
-      (shared == 0 ? 0.0 : 0.2);
+  final double color;
+  final double formality;
+  final double occasion;
 }
 
-MatchSuggestion? _score(WardrobeItem base, WardrobeItem other) {
-  final score = pairScore(base, other);
+/// Weighted compatibility changes with the selected occasion.
+/// Returns 0 for a pair that must not be worn together.
+PairSubscores pairSubscores(
+  WardrobeItem a,
+  WardrobeItem b, {
+  String occasion = 'Kasual',
+  String colorHarmony = 'auto',
+}) {
+  if (a.id == b.id) {
+    return const PairSubscores(color: 0, formality: 0, occasion: 0);
+  }
+  if (!canPair(a, b)) {
+    return const PairSubscores(color: 0, formality: 0, occasion: 0);
+  }
+
+  final gap = (a.formality - b.formality).abs();
+  final pairConsistency = (1 - gap / 4).clamp(0.0, 1.0);
+  final targetFormality = switch (occasion) {
+    'Formal' => 4.5,
+    'Smart-Casual' => 3.5,
+    'Kasual' => 2.0,
+    'Sport' => 1.5,
+    _ => 2.0,
+  };
+  final averageFormality = (a.formality + b.formality) / 2;
+  final occasionFit = (1 - (averageFormality - targetFormality).abs() / 4)
+      .clamp(0.0, 1.0);
+  final formality = (pairConsistency + occasionFit) / 2;
+  final occasionScore =
+      a.occasions.contains(occasion) && b.occasions.contains(occasion)
+      ? 1.0
+      : (a.occasions.contains(occasion) || b.occasions.contains(occasion)
+            ? 0.5
+            : 0.0);
+  return PairSubscores(
+    color: colorHarmonyScore(
+      a.dominantColorHex,
+      b.dominantColorHex,
+      colorHarmony,
+    ),
+    formality: formality,
+    occasion: occasionScore,
+  );
+}
+
+double pairScore(
+  WardrobeItem a,
+  WardrobeItem b, {
+  String occasion = 'Kasual',
+  String colorHarmony = 'auto',
+}) {
+  final subscores = pairSubscores(
+    a,
+    b,
+    occasion: occasion,
+    colorHarmony: colorHarmony,
+  );
+  if (subscores.color == 0 &&
+      subscores.formality == 0 &&
+      subscores.occasion == 0) {
+    return 0;
+  }
+
+  final weights = switch (occasion) {
+    'Formal' => (color: 0.30, formality: 0.50, occasion: 0.20),
+    'Smart-Casual' => (color: 0.45, formality: 0.35, occasion: 0.20),
+    'Kasual' || 'Sport' => (color: 0.55, formality: 0.20, occasion: 0.25),
+    _ => (color: 0.50, formality: 0.30, occasion: 0.20),
+  };
+  return subscores.color * weights.color +
+      subscores.formality * weights.formality +
+      subscores.occasion * weights.occasion;
+}
+
+PairSubscores outfitSubscores(
+  List<WardrobeItem> items, {
+  String occasion = 'Kasual',
+  String colorHarmony = 'auto',
+}) {
+  if (items.length < 2) {
+    return const PairSubscores(color: 0, formality: 0, occasion: 0);
+  }
+  var color = 0.0;
+  var formality = 0.0;
+  var occasionScore = 0.0;
+  var pairs = 0;
+  for (var i = 0; i < items.length; i++) {
+    for (var j = i + 1; j < items.length; j++) {
+      final subscore = pairSubscores(
+        items[i],
+        items[j],
+        occasion: occasion,
+        colorHarmony: colorHarmony,
+      );
+      color += subscore.color;
+      formality += subscore.formality;
+      occasionScore += subscore.occasion;
+      pairs++;
+    }
+  }
+  if (pairs == 0) {
+    return const PairSubscores(color: 0, formality: 0, occasion: 0);
+  }
+  return PairSubscores(
+    color: color / pairs,
+    formality: formality / pairs,
+    occasion: occasionScore / pairs,
+  );
+}
+
+MatchSuggestion? _score(
+  WardrobeItem base,
+  WardrobeItem other, {
+  String occasion = 'Kasual',
+}) {
+  final score = pairScore(base, other, occasion: occasion);
   if (score == 0) return null;
 
   final harmony = harmonyOf(base.color, other.color);
@@ -103,9 +214,11 @@ List<MatchSuggestion> recommendMatches(
   WardrobeItem base,
   List<WardrobeItem> all, {
   int limit = 20,
+  String occasion = 'Kasual',
 }) {
-  final out = all.map((o) => _score(base, o)).nonNulls.toList()
-    ..sort((a, b) => b.score.compareTo(a.score));
+  final out =
+      all.map((o) => _score(base, o, occasion: occasion)).nonNulls.toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
   return out.take(limit).toList();
 }
 
@@ -129,13 +242,22 @@ List<MatchSuggestion> outfitFor(
 ///
 /// A conflicting pair (two tops, or the same item twice) scores 0, so the
 /// number drops instead of silently ignoring the clash.
-double outfitScore(List<WardrobeItem> items) {
+double outfitScore(
+  List<WardrobeItem> items, {
+  String occasion = 'Kasual',
+  String colorHarmony = 'auto',
+}) {
   if (items.length < 2) return 0;
   var sum = 0.0;
   var pairs = 0;
   for (var i = 0; i < items.length; i++) {
     for (var j = i + 1; j < items.length; j++) {
-      sum += pairScore(items[i], items[j]);
+      sum += pairScore(
+        items[i],
+        items[j],
+        occasion: occasion,
+        colorHarmony: colorHarmony,
+      );
       pairs++;
     }
   }
@@ -144,12 +266,13 @@ double outfitScore(List<WardrobeItem> items) {
 
 /// The pair dragging the set down, or null for fewer than two items.
 ({WardrobeItem a, WardrobeItem b, double score})? weakestPair(
-  List<WardrobeItem> items,
-) {
+  List<WardrobeItem> items, {
+  String occasion = 'Kasual',
+}) {
   ({WardrobeItem a, WardrobeItem b, double score})? worst;
   for (var i = 0; i < items.length; i++) {
     for (var j = i + 1; j < items.length; j++) {
-      final s = pairScore(items[i], items[j]);
+      final s = pairScore(items[i], items[j], occasion: occasion);
       if (worst == null || s < worst.score) {
         worst = (a: items[i], b: items[j], score: s);
       }
@@ -186,8 +309,9 @@ List<SwapSuggestion> improveOutfit(
   List<WardrobeItem> catalog, {
   required double threshold,
   int limit = 3,
+  String occasion = 'Kasual',
 }) {
-  final current = outfitScore(items);
+  final current = outfitScore(items, occasion: occasion);
   if (current >= threshold || items.length < 2) return const [];
 
   final used = items.map((i) => i.name).toSet();
@@ -196,7 +320,7 @@ List<SwapSuggestion> improveOutfit(
     for (final candidate in catalog) {
       if (used.contains(candidate.name)) continue;
       final trial = [...items]..[i] = candidate;
-      final score = outfitScore(trial);
+      final score = outfitScore(trial, occasion: occasion);
       if (score > current) {
         out.add(
           SwapSuggestion(
