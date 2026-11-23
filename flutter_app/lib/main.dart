@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'navigation.dart';
 import 'screens/login_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/update_password_screen.dart';
 import 'services/auth_service.dart';
 import 'services/outfit_service.dart';
@@ -58,7 +60,15 @@ Future<void> main() async {
   // so the home and wardrobe screens never flash an empty catalog.
   await initWardrobeStore(userId: client?.auth.currentUser?.id);
 
-  runApp(const GayakuApp());
+  bool hasSeenOnboarding = true;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+  } catch (e) {
+    debugPrint('Failed to read onboarding status: $e');
+  }
+
+  runApp(GayakuApp(hasSeenOnboarding: hasSeenOnboarding));
 
   if (client != null) followAuthChanges(client);
 
@@ -104,7 +114,9 @@ void followAuthChanges(SupabaseClient client) {
 }
 
 class GayakuApp extends StatelessWidget {
-  const GayakuApp({super.key});
+  const GayakuApp({super.key, this.hasSeenOnboarding = true});
+
+  final bool hasSeenOnboarding;
 
   @override
   Widget build(BuildContext context) {
@@ -123,9 +135,11 @@ class GayakuApp extends StatelessWidget {
               locale: Locale(langCode),
               // A stored session still starts on its own: opening the app on the login
               // form while the token is alive made every relaunch look like a logout.
-              home: authService.currentUser == null
-                  ? const LoginScreen()
-                  : const NavShell(),
+              home: authService.currentUser != null
+                  ? const NavShell()
+                  : (hasSeenOnboarding
+                      ? const LoginScreen()
+                      : const OnboardingScreen()),
             );
           },
         );
