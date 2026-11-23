@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import '../widgets/app_snackbar.dart';
 import 'login_screen.dart';
+import 'onboarding_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.showNav = true});
@@ -881,10 +882,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           palette,
                           icon: Icons.lock_outline,
                           title: isId ? 'Data & Privasi' : 'Data & Privacy',
-                          onTap: () => _showDataPrivacyBottomSheet(
-                            palette,
-                            isId,
-                          ), // <--- Hubungkan ke sini
+                          onTap: () =>
+                              _showDataPrivacyBottomSheet(palette, isId),
+                        ),
+                        const SizedBox(height: 12),
+                        _settingsTile(
+                          palette,
+                          icon: Icons.menu_book_outlined,
+                          title: isId ? 'Panduan Penggunaan' : 'User Guide',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const OnboardingScreen(),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 36),
 

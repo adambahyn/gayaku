@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../navigation.dart';
 import '../widgets/app_snackbar.dart';
+import 'onboarding_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -479,6 +480,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const OnboardingScreen(),
+                        ),
+                      );
+                    },
+                    icon: Icon(
+                      Icons.menu_book_outlined,
+                      size: 18,
+                      color: palette.inkMuted,
+                    ),
+                    label: Text(
+                      'Lihat Panduan Aplikasi',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: palette.inkMuted,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
               ],
