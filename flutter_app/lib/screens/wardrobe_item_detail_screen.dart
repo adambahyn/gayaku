@@ -9,6 +9,7 @@ import '../state/wardrobe_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/placeholder_image.dart';
 import '../widgets/note.dart';
+import '../widgets/app_snackbar.dart';
 
 /// Detail of one wardrobe item plus the pieces it pairs with.
 ///
@@ -103,7 +104,7 @@ class _WardrobeItemDetailScreenState extends State<WardrobeItemDetailScreen> {
       await saveWardrobeItem(edited);
       if (!mounted) return;
       setState(() => _item = edited);
-      showNote(context, 'Perubahan tersimpan');
+      showSuccessSnackBar(context, 'Perubahan tersimpan');
     } on WardrobeException catch (e) {
       if (mounted) showNote(context, e.message);
     }
@@ -651,7 +652,7 @@ class _CombineButton extends StatelessWidget {
         ),
       );
       if (context.mounted) {
-        showNote(context, 'Kombinasi tersimpan di tab Kombinasi');
+        showSuccessSnackBar(context, 'Kombinasi tersimpan di tab Kombinasi');
       }
     } on OutfitException catch (e) {
       if (context.mounted) showNote(context, e.message);

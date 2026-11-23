@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/wardrobe.dart';
 import '../theme/app_theme.dart';
 import '../widgets/placeholder_image.dart';
+import '../widgets/app_snackbar.dart';
 
 class OutfitDetailScreen extends StatefulWidget {
   const OutfitDetailScreen({super.key, required this.look});
@@ -34,11 +35,9 @@ class _OutfitDetailScreenState extends State<OutfitDetailScreen> {
 
   void _toggleFavorite() {
     setState(() => _isFavorite = !_isFavorite);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isFavorite ? 'Look saved to favorites' : 'Look removed'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    showSuccessSnackBar(
+      context,
+      _isFavorite ? 'Look saved to favorites' : 'Look removed',
     );
   }
 

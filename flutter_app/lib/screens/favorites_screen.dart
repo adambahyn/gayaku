@@ -9,6 +9,7 @@ import '../state/wardrobe_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import '../widgets/placeholder_image.dart';
+import '../widgets/app_snackbar.dart';
 import 'outfit_detail_screen.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -152,12 +153,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   };
 
   Future<void> removeFavorite(Look look) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${look.title} removed from favorites'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    showSuccessSnackBar(context, '${look.title} removed from favorites');
     try {
       if (_remoteLooks != null) {
         setState(() {

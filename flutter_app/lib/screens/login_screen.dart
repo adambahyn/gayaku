@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../navigation.dart';
+import '../widgets/app_snackbar.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -180,12 +181,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.of(dialogContext).pop();
 
                             if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Tautan reset password telah dikirim ke email.',
-                                ),
-                              ),
+                            showSuccessSnackBar(
+                              context,
+                              'Tautan reset password telah dikirim ke email.',
                             );
                           } on AuthException catch (e) {
                             setDialogState(() => isSubmitting = false);

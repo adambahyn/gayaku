@@ -12,6 +12,7 @@ import '../state/wardrobe_sync.dart';
 import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import '../widgets/note.dart';
+import '../widgets/app_snackbar.dart';
 import '../widgets/placeholder_image.dart';
 import '../widgets/wardrobe_item_card.dart';
 import 'outfit_builder_screen.dart';
@@ -286,7 +287,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       await saveWardrobeItem(edited);
       if (!mounted) return;
       _clearSelection();
-      showNote(context, 'Perubahan tersimpan');
+      showSuccessSnackBar(context, 'Perubahan tersimpan');
     } on Object catch (e) {
       // Anything the service did not type — a socket error, a store that is
       // not open — must still reach the user instead of vanishing.
@@ -372,7 +373,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     if (!mounted) return;
     _clearSelection();
     final skipped = targets.length - free.length;
-    showNote(
+    showSuccessSnackBar(
       context,
       '$removed baju dihapus'
       '${skipped > 0 ? ', $skipped dilewati karena masih dipakai kombinasi' : ''}',

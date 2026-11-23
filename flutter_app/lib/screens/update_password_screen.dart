@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../navigation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_snackbar.dart';
 import 'login_screen.dart';
 
 class UpdatePasswordScreen extends StatefulWidget {
@@ -49,9 +50,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     try {
       await authService.updatePassword(newPassword);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password berhasil diperbarui.')),
-      );
+      showSuccessSnackBar(context, 'Password berhasil diperbarui.');
 
       final Widget destination = authService.currentUser == null
           ? const LoginScreen()
