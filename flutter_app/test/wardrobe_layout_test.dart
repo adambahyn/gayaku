@@ -64,10 +64,7 @@ void main() {
       'firstTile=${tester.getRect(find.byType(WardrobeItemCard).first)}',
     );
 
-    await tester.drag(
-      find.byType(SingleChildScrollView),
-      const Offset(0, -400),
-    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

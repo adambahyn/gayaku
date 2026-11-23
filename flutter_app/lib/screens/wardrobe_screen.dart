@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../logic/outfit_matcher.dart';
@@ -54,6 +56,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   /// Ids picked by a long press; non-empty means the catalog is selecting.
   final Set<String> _selected = {};
 
+  /// Holds the last keystroke so filtering runs once per pause, not per letter.
+  Timer? _searchDebounce;
+
   bool get _selecting => _selected.isNotEmpty;
 
   @override
@@ -76,8 +81,21 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  void _onQuery(String value) {
+    _searchDebounce?.cancel();
+    // Empty is the clear button: apply at once, there is nothing to wait for.
+    if (value.isEmpty) {
+      setState(() => _query = value);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 200), () {
+      if (mounted) setState(() => _query = value);
+    });
   }
 
   bool get _filtering =>
@@ -87,7 +105,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
   /// The line under the title: what the list below actually holds, plus the
   /// filters that are on — a count alone looks wrong once two are active.
-  String _subtitle(List<SavedOutfit> outfits) {
+  String _subtitle(List<SavedOutfit> outfits, int itemCount) {
     if (_tab == 1) {
       final count = _favoritesOnly
           ? outfits.where((outfit) => outfit.favorite).length
@@ -104,7 +122,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       if (_minFormality > 1) 'formalitas $_minFormality',
     ];
     final suffix = filters.isEmpty ? '' : ' ${filters.join(' ')}';
-    return 'Total ${_visible.length} $noun$suffix';
+    return 'Total $itemCount $noun$suffix';
   }
 
   Future<void> _openBuilder({SavedOutfit? existing}) async {
@@ -213,6 +231,11 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
   }
 
+  /// The message a failed call deserves: the service's own when it typed one.
+  static String _message(Object error) => error is WardrobeException
+      ? error.message
+      : 'Gagal menghubungi server. Coba lagi.';
+
   void _toggle(WardrobeItem item) {
     setState(() {
       if (!_selected.remove(item.id)) _selected.add(item.id);
@@ -233,7 +256,13 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       builder: (_) =>
           _ItemPreviewSheet(item: item, selectedCount: _selected.length),
     );
-    if (!mounted || action == null) return;
+    if (!mounted) return;
+    if (action == null) {
+      // Sheet dismissed: drop the pick it made, or the catalog stays in
+      // selection mode with a garment the user never chose.
+      setState(() => _selected.remove(item.id));
+      return;
+    }
     switch (action) {
       case _ItemAction.edit:
         await _editOne(item);
@@ -258,8 +287,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       if (!mounted) return;
       _clearSelection();
       showNote(context, 'Perubahan tersimpan');
-    } on WardrobeException catch (e) {
-      if (mounted) showNote(context, e.message);
+    } on Object catch (e) {
+      // Anything the service did not type — a socket error, a store that is
+      // not open — must still reach the user instead of vanishing.
+      if (mounted) showNote(context, _message(e));
     }
   }
 
@@ -333,12 +364,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
     var removed = 0;
     try {
-      for (final id in free) {
-        await removeWardrobeItem(id);
-        removed++;
-      }
-    } on WardrobeException catch (e) {
-      if (mounted) showNote(context, e.message);
+      await removeWardrobeItems(free);
+      removed = free.length;
+    } on Object catch (e) {
+      if (mounted) showNote(context, _message(e));
     }
     if (!mounted) return;
     _clearSelection();
@@ -379,39 +408,103 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
   Widget _scaffold(BuildContext context) {
     final palette = AppColors.of(context);
+    // Filtered once per build: the subtitle and the grid read the same list.
+    final items = _visible;
     return Scaffold(
       backgroundColor: palette.canvas,
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ValueListenableBuilder<List<SavedOutfit>>(
-                      valueListenable: savedOutfits,
-                      builder: (context, outfits, _) => _Header(
-                        subtitle: _subtitle(outfits),
-                        // One + for both tabs: scan a garment on the catalog,
-                        // build a combination on the saved ones.
-                        onAdd: _tab == 0
-                            ? () => openNavDestination(context, 2)
-                            : () => _openBuilder(),
-                        addTooltip: _tab == 0 ? 'Add item' : 'Buat Kombinasi',
+              child: RefreshIndicator(
+                color: palette.actionInk,
+                onRefresh: loadWardrobeFromBackend,
+                child: CustomScrollView(
+                  // Always scrollable, so the pull gesture works on a short list.
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ValueListenableBuilder<List<SavedOutfit>>(
+                              valueListenable: savedOutfits,
+                              builder: (context, outfits, _) => _Header(
+                                subtitle: _subtitle(outfits, items.length),
+                                // One + for both tabs: scan a garment on the
+                                // catalog, build a combination on the saved ones.
+                                onAdd: _tab == 0
+                                    ? () => openNavDestination(context, 2)
+                                    : () => _openBuilder(),
+                                addTooltip: _tab == 0
+                                    ? 'Tambah item'
+                                    : 'Buat Kombinasi',
+                              ),
+                            ),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: wardrobeOnline,
+                              builder: (context, online, _) => online
+                                  ? const SizedBox.shrink()
+                                  : const _OfflineBanner(),
+                            ),
+                            const SizedBox(height: 16),
+                            _TabToggle(
+                              tab: _tab,
+                              onChanged: (t) => setState(() {
+                                _tab = t;
+                                _selected.clear();
+                              }),
+                            ),
+                            const SizedBox(height: 16),
+                            if (_tab == 0)
+                              ..._catalogHeader()
+                            else
+                              ..._outfitTab(),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _TabToggle(
-                      tab: _tab,
-                      onChanged: (t) => setState(() {
-                        _tab = t;
-                        _selected.clear();
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_tab == 0) ..._catalogTab() else ..._outfitTab(),
+                    if (_tab == 0)
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        sliver: items.isEmpty
+                            ? SliverToBoxAdapter(child: _emptyCatalog())
+                            : SliverGrid(
+                                // Lazy: only the visible tiles build, and the
+                                // column count follows the width (2 on a phone,
+                                // 3-4 on a tablet) with no breakpoint constant.
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 220,
+                                      mainAxisSpacing: 16,
+                                      crossAxisSpacing: 12,
+                                      childAspectRatio: 0.75,
+                                    ),
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final item = items[index];
+                                  return WardrobeItemCard(
+                                    // Stable identity, or a filtered rebuild
+                                    // recycles one garment's image into another.
+                                    key: ValueKey(item.id),
+                                    item: item,
+                                    selected: _selected.contains(item.id),
+                                    // While selecting, a tap adds or drops a
+                                    // garment instead of leaving the page.
+                                    onTap: _selecting
+                                        ? () => _toggle(item)
+                                        : null,
+                                    onLongPress: () => _preview(item),
+                                  );
+                                }, childCount: items.length),
+                              ),
+                      )
+                    else
+                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   ],
                 ),
               ),
@@ -430,15 +523,31 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
-  List<Widget> _catalogTab() {
+  Widget _emptyCatalog() {
     final palette = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final items = _visible;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+        child: Text(
+          'Belum ada item di kategori ini.',
+          textAlign: TextAlign.center,
+          style: textTheme.bodyLarge!.copyWith(
+            fontWeight: FontWeight.w400,
+            color: palette.inkMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Search row and selection bar; the grid is the sliver above.
+  List<Widget> _catalogHeader() {
     return [
       _SearchRow(
         controller: _search,
         filtering: _filtering,
-        onQuery: (value) => setState(() => _query = value),
+        onQuery: _onQuery,
         onFilter: _openFilters,
       ),
       if (_selecting) ...[
@@ -455,41 +564,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           onClear: _clearSelection,
         ),
       ],
-      const SizedBox(height: 16),
-      if (items.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Center(
-            child: Text(
-              'Nothing in this category yet.',
-              textAlign: TextAlign.center,
-              style: textTheme.bodyLarge!.copyWith(
-                fontWeight: FontWeight.w400,
-                color: palette.inkMuted,
-              ),
-            ),
-          ),
-        )
-      else
-        GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.75,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (final item in items)
-              WardrobeItemCard(
-                item: item,
-                selected: _selected.contains(item.id),
-                // While selecting, a tap adds or drops a garment instead of
-                // leaving for the detail page.
-                onTap: _selecting ? () => _toggle(item) : null,
-                onLongPress: () => _preview(item),
-              ),
-          ],
-        ),
     ];
   }
 
@@ -632,6 +706,41 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Shown while the last sync failed: the grid below is the device's copy, not
+/// the server's answer, and the user needs to know that before deleting.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: palette.surfaceMuted,
+        borderRadius: AppRadius.panel,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.cloud_off, size: 18, color: palette.inkMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Offline — menampilkan data terakhir di perangkat.',
+              style: textTheme.labelMedium!.copyWith(
+                fontWeight: FontWeight.w500,
+                color: palette.inkMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -956,7 +1065,7 @@ class _SearchRowState extends State<_SearchRow> {
                     decoration: InputDecoration(
                       isCollapsed: true,
                       border: InputBorder.none,
-                      hintText: 'Search your clothes...',
+                      hintText: 'Cari pakaianmu...',
                       hintStyle: textTheme.labelLarge!.copyWith(
                         fontWeight: FontWeight.w500,
                         color: palette.inkMuted,
@@ -971,7 +1080,7 @@ class _SearchRowState extends State<_SearchRow> {
                       ? const SizedBox.shrink()
                       : IconButton(
                           key: const ValueKey('clear'),
-                          tooltip: 'Clear search',
+                          tooltip: 'Hapus pencarian',
                           onPressed: () {
                             widget.controller.clear();
                             widget.onQuery('');

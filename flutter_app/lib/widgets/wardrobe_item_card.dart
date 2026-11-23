@@ -38,7 +38,7 @@ class WardrobeItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
-    return GestureDetector(
+    final card = GestureDetector(
       onTap:
           onTap ??
           () => Navigator.of(context).push(
@@ -123,6 +123,19 @@ class WardrobeItemCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+    // One node, one sentence: without this TalkBack reads the name and the
+    // "Category • Brand" line as two unrelated items.
+    return Semantics(
+      label: [
+        item.name,
+        item.category,
+        if (item.brand.isNotEmpty) item.brand,
+        if (selected) 'dipilih',
+      ].join(', '),
+      button: true,
+      excludeSemantics: true,
+      child: card,
     );
   }
 }

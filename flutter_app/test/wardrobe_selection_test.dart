@@ -55,20 +55,59 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    // The last drag only lands after a frame: without this the tile is still
+    // 130 px below the viewport when the tap fires.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Straight Leg Jeans'));
     await tester.pumpAndSettle();
 
-    expect(find.text('2 dipilih'), findsOneWidget);
-    expect(find.byKey(const ValueKey('selection-edit')), findsNothing);
-    expect(find.byKey(const ValueKey('selection-delete')), findsOneWidget);
+    // The bar sits in the header, which is off-screen after the scroll, and
+    // finders skip offstage widgets by default.
+    expect(find.text('2 dipilih', skipOffstage: false), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('selection-edit'), skipOffstage: false),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('selection-delete'), skipOffstage: false),
+      findsOneWidget,
+    );
     expect(find.byType(WardrobeItemDetailScreen), findsNothing);
 
     // Tapping the same tile drops it again, and edit comes back.
+    await tester.scrollUntilVisible(
+      find.text('Straight Leg Jeans'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    // The last drag only lands after a frame: without this the tile is still
+    // 130 px below the viewport when the tap fires.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Straight Leg Jeans'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 dipilih'), findsOneWidget);
-    expect(find.byKey(const ValueKey('selection-edit')), findsOneWidget);
+    expect(find.text('1 dipilih', skipOffstage: false), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('selection-edit'), skipOffstage: false),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('dismissing the preview drops the pick it made', (
+    WidgetTester tester,
+  ) async {
+    await pumpCatalog(tester);
+
+    await tester.longPress(find.text('Silk Blouse'));
+    await tester.pumpAndSettle();
+    // Tapping the scrim closes the sheet without choosing an action; the pick
+    // it made on the way in must not survive.
+    await tester.tapAt(const Offset(210, 20));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('preview-edit')), findsNothing);
+    expect(find.textContaining('dipilih'), findsNothing);
+    expect(find.byKey(const ValueKey('selection-delete')), findsNothing);
   });
 
   testWidgets('cancelling the selection returns to the plain catalog', (
