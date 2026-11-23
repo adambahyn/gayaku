@@ -117,6 +117,78 @@ void main() {
   });
 
   group('outfitScore', () {
+    test('formality includes pair consistency and target occasion fit', () {
+      const casualTop = WardrobeItem(
+        id: 'casual-top',
+        name: 'Kaos',
+        category: 'Tops',
+        formality: 1,
+        imagePath: '',
+      );
+      const casualBottom = WardrobeItem(
+        id: 'casual-bottom',
+        name: 'Celana Santai',
+        category: 'Bottoms',
+        formality: 2,
+        imagePath: '',
+      );
+      const formalTop = WardrobeItem(
+        id: 'formal-top',
+        name: 'Kemeja',
+        category: 'Tops',
+        formality: 4,
+        imagePath: '',
+      );
+      const formalBottom = WardrobeItem(
+        id: 'formal-bottom',
+        name: 'Celana Formal',
+        category: 'Bottoms',
+        formality: 5,
+        imagePath: '',
+      );
+
+      final casualPair = pairSubscores(
+        casualTop,
+        casualBottom,
+        occasion: 'Formal',
+      ).formality;
+      final formalPair = pairSubscores(
+        formalTop,
+        formalBottom,
+        occasion: 'Formal',
+      ).formality;
+
+      expect(casualPair, closeTo(0.5, 0.001));
+      expect(formalPair, closeTo(0.875, 0.001));
+      expect(casualPair, lessThan(formalPair));
+    });
+
+    test('uses item ids rather than names for duplicate detection', () {
+      final sameId = WardrobeItem(
+        id: _top.id,
+        name: 'Nama berbeda',
+        category: 'Bottoms',
+        imagePath: '',
+      );
+      final sameName = WardrobeItem(
+        id: 'item-with-distinct-id',
+        name: _top.name,
+        category: 'Bottoms',
+        imagePath: '',
+      );
+
+      expect(pairSubscores(_top, sameId).color, 0);
+      expect(pairSubscores(_top, sameName).color, greaterThan(0));
+    });
+
+    test('uses occasion-specific weights for pair scoring', () {
+      final formal = pairScore(_top, _bottoms, occasion: 'Formal');
+      final casual = pairScore(_top, _bottoms, occasion: 'Kasual');
+      expect(formal, inInclusiveRange(0, 1));
+      expect(casual, inInclusiveRange(0, 1));
+      expect(formal, isNot(casual));
+    });
+
     test('averages pairs and drops to 0 on a slot clash', () {
       final clash = outfitScore([_top, _otherTop]);
       expect(clash, 0, reason: 'two tops never pair');
@@ -213,7 +285,6 @@ void main() {
     final set = [
       for (final id in ids) ...wardrobeFixture.where((i) => i.id == id),
     ];
-    final swap = improveOutfit(set, wardrobeFixture, threshold: 0.95).first;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -231,15 +302,272 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Edit Kombinasi'), findsOneWidget);
-    expect(find.text('Batas minimum'), findsOneWidget);
-    expect(find.text('Rekomendasi Peningkatan'), findsOneWidget);
+    expect(find.text('Target Keserasian'), findsOneWidget);
+    expect(
+      find.text('Minimal skor kecocokan warna, formalitas, dan acara.'),
+      findsOneWidget,
+    );
+    expect(find.text('Pilih pakaian utama'), findsOneWidget);
+    expect(find.text('Harmoni warna'), findsNothing);
     expect(find.text('${(outfitScore(set) * 100).round()}%'), findsWidgets);
 
-    await tester.tap(find.textContaining('Ganti ').first);
+    final recommendButton = find.text('Buat Kombinasi');
+    await tester.ensureVisible(recommendButton);
+    await tester.tap(recommendButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Hasil rekomendasi'), findsNothing);
+    expect(find.text('Hasil Kombinasi'), findsOneWidget);
+    expect(find.text('Buat Kombinasi'), findsOneWidget);
+    expect(find.textContaining('Warna'), findsWidgets);
+    expect(find.textContaining('Formalitas'), findsWidgets);
+    expect(find.textContaining('Acara'), findsWidgets);
+  });
+
+  testWidgets('builder asks for a name before saving an edited combination', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final existing = SavedOutfit(
+      id: 'rename-dialog-test',
+      name: 'Nama lama',
+      itemIds: const ['test-kaos', 'test-celana'],
+      threshold: 0.5,
+    );
+    savedOutfits.value = [existing];
+    addTearDown(() => savedOutfits.value = []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => OutfitBuilderScreen(
+                    existing: existing,
+                    catalog: const [_top, _bottoms],
+                  ),
+                ),
+              ),
+              child: const Text('Open builder'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open builder'));
     await tester.pumpAndSettle();
 
-    // Applying the best swap moves the meter to its new score.
-    expect(find.text('${swap.gainPercent}%'), findsWidgets);
+    final saveButton = find.text('Simpan Perubahan');
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Batal'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText ==
+                'Nama kombinasi, mis. Kuliah Senin' &&
+            widget.autofocus,
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+    expect(savedOutfits.value.single.name, 'Nama lama');
+
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Kuliah Senin');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    expect(savedOutfits.value.single.id, existing.id);
+    expect(savedOutfits.value.single.name, 'Kuliah Senin');
+
+    await tester.tap(find.text('Open builder'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.tap(find.text('Simpan'));
+    await tester.pumpAndSettle();
+
+    expect(savedOutfits.value.single.name, 'Kombinasi Baru');
+  });
+
+  testWidgets('builder recommends a complete outfit from one selected top', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(home: OutfitBuilderScreen(catalog: wardrobeFixture)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pilih pakaian utama'), findsOneWidget);
+    expect(
+      find.text(
+        'Untuk sementara, nama hanya menjadi label saat kombinasi disimpan.',
+      ),
+      findsNothing,
+    );
+    expect(find.text('Isi otomatis'), findsNothing);
+    expect(find.text('Isi Otomatis'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('recommendation-top')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Silk Blouse'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Smart Casual'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
+          .groupValue,
+      'Smart-Casual',
+    );
+    final createButton = find.text('Buat Kombinasi');
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hasil rekomendasi'), findsNothing);
+    expect(find.text('Bottoms'), findsWidgets);
+    expect(find.text('Outerwear'), findsWidgets);
+    expect(find.text('Shoes'), findsWidgets);
+    expect(find.text('Accessories'), findsWidgets);
+    expect(find.byIcon(Icons.refresh), findsWidgets);
+    expect(find.byIcon(Icons.lock_outline), findsWidgets);
+    final anchorBottom = find.byKey(const ValueKey('recommendation-bottom'));
+    expect(
+      find.descendant(of: anchorBottom, matching: find.text('Pilih item')),
+      findsOneWidget,
+      reason: 'recommended Bottoms must not become the input anchor',
+    );
+    expect(
+      find.text('Straight Leg Jeans').evaluate().isNotEmpty ||
+          find.text('Pleated Midi Skirt').evaluate().isNotEmpty,
+      isTrue,
+    );
+    expect(find.text('Beige Trench'), findsWidgets);
+
+    final resultBottom = find.byKey(const ValueKey('result-Bottoms'));
+    await tester.tap(
+      find.descendant(
+        of: resultBottom,
+        matching: find.byTooltip('Hapus dari kombinasi'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: resultBottom,
+        matching: find.text('Slot dikosongkan'),
+      ),
+      findsOneWidget,
+    );
+    final refreshBottom = find.descendant(
+      of: resultBottom,
+      matching: find.byTooltip('Refresh Bottoms'),
+    );
+    expect(refreshBottom, findsOneWidget);
+    await tester.tap(refreshBottom);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: resultBottom,
+        matching: find.text('Slot dikosongkan'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('empty result slots show neutral unavailable state', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(home: OutfitBuilderScreen(catalog: [wardrobeFixture.first])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('recommendation-top')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Silk Blouse'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buat Kombinasi'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tidak ada item yg cocok'), findsNWidgets(4));
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    final emptyBottom = find.byKey(const ValueKey('result-Bottoms'));
+    expect(
+      find.descendant(of: emptyBottom, matching: find.byIcon(Icons.add)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: emptyBottom,
+        matching: find.byIcon(Icons.checkroom_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Atasan (Tops) dan Bawahan (Bottoms) Wajib Terisi'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('empty result slots stay inactive until combinations are made', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: OutfitBuilderScreen(catalog: [_top, _bottoms])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('recommendation-top')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kaos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('recommendation-bottom')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Celana'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Atasan (Tops) dan Bawahan (Bottoms) Wajib Terisi'),
+      findsNothing,
+    );
+    expect(find.text('Belum dibuat'), findsNWidgets(3));
+    expect(find.byIcon(Icons.refresh), findsNothing);
+    for (final slot in ['Outerwear', 'Shoes', 'Accessories']) {
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('result-$slot')),
+          matching: find.text('Belum dibuat'),
+        ),
+        findsOneWidget,
+      );
+    }
   });
 
   testWidgets('detail page lists the matched pieces', (tester) async {

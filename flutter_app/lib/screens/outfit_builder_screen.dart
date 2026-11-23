@@ -1,8 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../logic/outfit_matcher.dart';
+import '../logic/rule_based_recommender.dart';
 import '../models/wardrobe.dart';
 import '../state/outfit_store.dart';
 import '../state/wardrobe_store.dart';
@@ -12,8 +11,8 @@ import '../widgets/note.dart';
 
 /// Build or edit one combination by hand, slot per slot.
 ///
-/// A live [outfitScore] meter plus a threshold slider: while the score sits
-/// below the threshold, [improveOutfit] proposes swaps that lift it.
+/// A live [outfitScore] meter plus a threshold slider for manual and
+/// recommendation-based outfit assembly.
 class OutfitBuilderScreen extends StatefulWidget {
   const OutfitBuilderScreen({super.key, this.existing, this.catalog});
 
@@ -31,13 +30,11 @@ class OutfitBuilderScreen extends StatefulWidget {
 class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
   late final TextEditingController _name;
   late List<WardrobeItem> _picked;
+  WardrobeItem? _anchorTop;
+  WardrobeItem? _anchorBottom;
+  bool _hasGenerated = false;
   late double _threshold;
-
-  /// Reroll source for [autoFillOutfit]; kept so a second tap can differ.
-  final _rng = Random();
-
-  /// Occasion the auto-fill aims for; null means "tema apa saja".
-  String? _theme;
+  String _occasion = 'Kasual';
 
   /// The garments offered per slot: the injected override, else the live store.
   List<WardrobeItem> get _catalog => widget.catalog ?? wardrobeItems.value;
@@ -48,7 +45,12 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
     final existing = widget.existing;
     _name = TextEditingController(text: existing?.name ?? '');
     _picked = existing?.itemsOf(_catalog) ?? [];
-    _threshold = existing?.threshold ?? 0.80;
+    _anchorTop = _picked.where((item) => item.category == 'Tops').firstOrNull;
+    _anchorBottom = _picked
+        .where((item) => item.category == 'Bottoms')
+        .firstOrNull;
+    _hasGenerated = existing != null;
+    _threshold = existing?.threshold ?? 0.6;
   }
 
   @override
@@ -59,7 +61,7 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
 
   List<String> get _slots => wardrobeSlots;
 
-  double get _score => outfitScore(_picked);
+  double get _score => outfitScore(_picked, occasion: _occasion);
 
   /// One item per slot; outerwear and accessories are optional layers.
   bool _isOptional(String slot) => slot == 'Outerwear' || slot == 'Accessories';
@@ -67,14 +69,95 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
   WardrobeItem? _at(String slot) =>
       _picked.where((i) => i.category == slot).firstOrNull;
 
-  void _set(String slot, WardrobeItem item) {
+  WardrobeItem? _anchorAt(String slot) => switch (slot) {
+    'Tops' => _anchorTop,
+    'Bottoms' => _anchorBottom,
+    _ => null,
+  };
+
+  bool _isAnchor(String slot) => _anchorAt(slot) != null;
+
+  List<WardrobeItem> _compatibleCandidates(String slot) {
+    if (_isAnchor(slot)) return const [];
+    final activeItems = _picked.where((item) => item.category != slot).toList();
+    if (activeItems.isEmpty) return const [];
+    final anchorIds = {
+      if (_anchorTop != null) _anchorTop!.id,
+      if (_anchorBottom != null) _anchorBottom!.id,
+    };
+    final candidates = _catalog
+        .where(
+          (item) =>
+              item.category == slot &&
+              !anchorIds.contains(item.id) &&
+              activeItems.every(
+                (active) =>
+                    pairScore(active, item, occasion: _occasion) >= _threshold,
+              ),
+        )
+        .toList();
+    candidates.sort((a, b) {
+      double fit(WardrobeItem candidate) => activeItems.fold(
+        0.0,
+        (score, active) =>
+            score + pairScore(active, candidate, occasion: _occasion),
+      );
+      return fit(b).compareTo(fit(a));
+    });
+    return candidates;
+  }
+
+  bool _hasCompatibleCandidate(String slot) =>
+      _compatibleCandidates(slot).isNotEmpty;
+
+  void _setAnchor(String slot, WardrobeItem item) {
     setState(() {
-      _picked = [..._picked.where((i) => i.category != slot), item];
+      if (slot == 'Tops') {
+        _anchorTop = item;
+      } else if (slot == 'Bottoms') {
+        _anchorBottom = item;
+      }
+      _hasGenerated = false;
+      _picked = [?_anchorTop, ?_anchorBottom];
     });
   }
 
   void _remove(String slot) {
-    setState(() => _picked = _picked.where((i) => i.category != slot).toList());
+    if (_isAnchor(slot)) return;
+    setState(() {
+      _picked = _picked.where((i) => i.category != slot).toList();
+    });
+  }
+
+  void _refreshSlot(String slot) {
+    if (_isAnchor(slot)) return;
+    final candidates = _compatibleCandidates(slot);
+    if (candidates.isEmpty) {
+      setState(() {
+        _picked = _picked.where((item) => item.category != slot).toList();
+      });
+      showNote(context, 'Belum ada kandidat $slot yang cocok');
+      return;
+    }
+
+    final current = _at(slot);
+    final currentIndex = current == null
+        ? -1
+        : candidates.indexWhere((item) => item.id == current.id);
+    final nextIndex = currentIndex < 0
+        ? 0
+        : (currentIndex + 1) % candidates.length;
+    final replacement = candidates[nextIndex];
+    if (current != null && replacement.id == current.id) {
+      showNote(context, 'Sudah tidak ada kandidat lain untuk $slot');
+      return;
+    }
+    setState(() {
+      _picked = [
+        ..._picked.where((item) => item.category != slot),
+        replacement,
+      ];
+    });
   }
 
   Future<void> _pick(String slot) async {
@@ -89,43 +172,110 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
       shape: const RoundedRectangleBorder(borderRadius: AppRadius.sheet),
       builder: (context) => _PickerSheet(slot: slot, options: options),
     );
-    if (chosen != null) _set(slot, chosen);
+    if (chosen != null) _setAnchor(slot, chosen);
   }
 
-  void _applySwap(SwapSuggestion swap) {
+  Future<void> _pickAnchor(String slot) async {
+    await _pick(slot);
+  }
+
+  void _clearAnchor(String slot) {
     setState(() {
-      _picked = [..._picked]..[swap.index] = swap.to;
+      if (slot == 'Tops') {
+        _anchorTop = null;
+      } else if (slot == 'Bottoms') {
+        _anchorBottom = null;
+      }
+      _hasGenerated = false;
+      _picked = [?_anchorTop, ?_anchorBottom];
     });
   }
 
-  /// Fills every slot with the best partner of the set so far, honouring the
-  /// chosen theme. Tapping again reshuffles among the near-best candidates.
-  void _autoFill() {
-    final filled = autoFillOutfit(_catalog, occasion: _theme, random: _rng);
-    if (filled.length < 2) {
-      showNote(context, 'Belum cukup item untuk mengisi otomatis');
+  void _recommend() {
+    setState(() {
+      _hasGenerated = true;
+    });
+    final anchors = [
+      _anchorTop,
+      _anchorBottom,
+    ].whereType<WardrobeItem>().toList();
+    if (anchors.isEmpty) {
+      showNote(context, 'Pilih atasan, bawahan, atau keduanya terlebih dahulu');
       return;
     }
+    final recommendations = const RuleBasedRecommender()
+        .recommendWithBestHarmony(
+          anchors: anchors,
+          wardrobe: _catalog,
+          occasion: _occasion,
+          threshold: _threshold,
+        );
+    if (recommendations.isEmpty) {
+      setState(() {
+        _picked = anchors;
+      });
+      showNote(
+        context,
+        'Belum ada pakaian yang cocok untuk melengkapi pilihan ini',
+      );
+      return;
+    }
+    final first = recommendations.first.items;
+    final filtered = <WardrobeItem>[
+      for (final item in first)
+        if (_isAnchor(item.category) ||
+            first
+                .where((other) => other.category != item.category)
+                .every(
+                  (other) =>
+                      pairScore(other, item, occasion: _occasion) >= _threshold,
+                ))
+          item,
+    ];
     setState(() {
-      _picked = filled;
-      if (_name.text.trim().isEmpty) {
-        _name.text = _theme == null
-            ? 'Kombinasi Otomatis'
-            : 'Kombinasi $_theme';
-      }
+      _picked = filtered;
     });
-    showNote(
-      context,
-      'Terisi otomatis: ${(outfitScore(filled) * 100).round()}%',
-    );
   }
 
   Future<void> _save() async {
-    final name = _name.text.trim();
-    if (_picked.length < 2) {
-      showNote(context, 'Pilih minimal 2 item dulu');
+    if (_at('Tops') == null || _at('Bottoms') == null) {
+      showNote(
+        context,
+        'Pastikan atasan (Tops) dan bawahan (Bottoms) terisi sebelum menyimpan',
+      );
       return;
     }
+    if (_score < _threshold) {
+      showNote(context, 'Skor kombinasi belum memenuhi batas minimum');
+      return;
+    }
+
+    final enteredName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nama Kombinasi'),
+        content: TextField(
+          controller: _name,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Nama kombinasi, mis. Kuliah Senin',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(_name.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (enteredName == null) return;
+    final name = enteredName.trim();
+
     try {
       await saveOutfit(
         SavedOutfit(
@@ -148,7 +298,8 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final swaps = improveOutfit(_picked, _catalog, threshold: _threshold);
+    final hasRequiredCategories = _at('Tops') != null && _at('Bottoms') != null;
+    final canSave = hasRequiredCategories && _score >= _threshold;
 
     return Scaffold(
       backgroundColor: palette.canvas,
@@ -163,26 +314,30 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
                   children: [
                     _TopBar(editing: widget.existing != null),
                     const SizedBox(height: 16),
-                    _NameField(controller: _name),
-                    const SizedBox(height: 16),
-                    _AutoFillBar(
-                      themes: {
-                        for (final item in _catalog) ...item.occasions,
-                      }.toList()..sort(),
-                      theme: _theme,
-                      onTheme: (value) => setState(() => _theme = value),
-                      onFill: _autoFill,
+                    _RecommendationControls(
+                      top: _anchorTop,
+                      bottom: _anchorBottom,
+                      occasion: _occasion,
+                      threshold: _threshold,
+                      onPickAnchor: _pickAnchor,
+                      onClearAnchor: _clearAnchor,
+                      onOccasion: (value) => setState(() {
+                        _occasion = value;
+                      }),
+                      onThreshold: (value) => setState(() {
+                        _threshold = value;
+                      }),
+                      onRecommend: _recommend,
                     ),
                     const SizedBox(height: 16),
                     _ScoreCard(
                       score: _score,
                       threshold: _threshold,
-                      weakest: weakestPair(_picked),
-                      onThreshold: (v) => setState(() => _threshold = v),
+                      subscores: outfitSubscores(_picked, occasion: _occasion),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Susun Kombinasi',
+                      'Hasil Kombinasi',
                       style: textTheme.headlineSmall!.copyWith(
                         fontWeight: FontWeight.w700,
                         color: palette.ink,
@@ -191,21 +346,21 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
                     const SizedBox(height: 12),
                     for (final slot in _slots) ...[
                       _SlotRow(
+                        key: ValueKey('result-$slot'),
                         slot: slot,
                         item: _at(slot),
                         optional: _isOptional(slot),
-                        onPick: () => _pick(slot),
+                        locked: _isAnchor(slot),
+                        hasGenerated: _hasGenerated,
+                        emptyCompatible:
+                            _hasGenerated &&
+                            _at(slot) == null &&
+                            _hasCompatibleCandidate(slot),
+                        onPick: null,
                         onClear: () => _remove(slot),
+                        onRefresh: () => _refreshSlot(slot),
                       ),
                       const SizedBox(height: 12),
-                    ],
-                    if (swaps.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      _ImproveSection(
-                        swaps: swaps,
-                        threshold: _threshold,
-                        onApply: _applySwap,
-                      ),
                     ],
                   ],
                 ),
@@ -213,28 +368,48 @@ class _OutfitBuilderScreenState extends State<OutfitBuilderScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.check, size: 18),
-                  label: Text(
-                    widget.existing == null
-                        ? 'Simpan Kombinasi'
-                        : 'Simpan Perubahan',
-                    style: textTheme.labelLarge!.copyWith(
-                      fontWeight: FontWeight.w600,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_hasGenerated && !canSave)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        !hasRequiredCategories
+                            ? 'Atasan (Tops) dan Bawahan (Bottoms) Wajib Terisi'
+                            : 'Skor kombinasi belum memenuhi batas minimum',
+                        style: textTheme.labelMedium!.copyWith(
+                          color: palette.actionInk,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: canSave ? _save : null,
+                      icon: const Icon(Icons.check, size: 18),
+                      label: Text(
+                        widget.existing == null
+                            ? 'Simpan Kombinasi'
+                            : 'Simpan Perubahan',
+                        style: textTheme.labelLarge!.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: palette.action,
+                        foregroundColor: palette.onAction,
+                        disabledBackgroundColor: palette.surfaceMuted,
+                        disabledForegroundColor: palette.inkMuted,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: AppRadius.panel,
+                        ),
+                      ),
                     ),
                   ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: palette.action,
-                    foregroundColor: palette.onAction,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: AppRadius.panel,
-                    ),
-                  ),
-                ),
+                ],
               ),
             ),
           ],
@@ -280,63 +455,17 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _NameField extends StatelessWidget {
-  const _NameField({required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = AppColors.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: palette.sheet,
-        borderRadius: AppRadius.field,
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.edit_outlined, size: 18, color: palette.inkMuted),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              style: textTheme.labelLarge!.copyWith(
-                fontWeight: FontWeight.w500,
-                color: palette.ink,
-              ),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                hintText: 'Nama kombinasi, mis. Kantor Senin',
-                hintStyle: textTheme.labelLarge!.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: palette.inkMuted,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Live match meter + the threshold slider that drives the suggestions.
+/// Live match meter and category subscores for the current combination.
 class _ScoreCard extends StatelessWidget {
   const _ScoreCard({
     required this.score,
     required this.threshold,
-    required this.weakest,
-    required this.onThreshold,
+    required this.subscores,
   });
 
   final double score;
   final double threshold;
-  final ({WardrobeItem a, WardrobeItem b, double score})? weakest;
-  final ValueChanged<double> onThreshold;
+  final PairSubscores subscores;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +473,6 @@ class _ScoreCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final percent = (score * 100).round();
     final meets = score >= threshold;
-    final weak = weakest;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -370,9 +498,7 @@ class _ScoreCard extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    meets
-                        ? 'Memenuhi batas'
-                        : 'Di bawah batas ${(threshold * 100).round()}%',
+                    meets ? 'Memenuhi target' : 'Di bawah target',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.labelMedium!.copyWith(
@@ -394,27 +520,158 @@ class _ScoreCard extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation(palette.actionInk),
             ),
           ),
-          if (weak != null && weak.score < 0.6) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Pasangan terlemah: ${weak.a.name} + ${weak.b.name} '
-              '(${(weak.score * 100).round()}%)',
-              style: textTheme.labelMedium!.copyWith(
-                fontWeight: FontWeight.w400,
-                color: palette.inkMuted,
-              ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _SubscoreChip(label: 'Warna', value: subscores.color),
+              _SubscoreChip(label: 'Formalitas', value: subscores.formality),
+              _SubscoreChip(label: 'Acara', value: subscores.occasion),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendationControls extends StatelessWidget {
+  const _RecommendationControls({
+    required this.top,
+    required this.bottom,
+    required this.occasion,
+    required this.threshold,
+    required this.onPickAnchor,
+    required this.onClearAnchor,
+    required this.onOccasion,
+    required this.onThreshold,
+    required this.onRecommend,
+  });
+
+  final WardrobeItem? top;
+  final WardrobeItem? bottom;
+  final String occasion;
+  final double threshold;
+  final ValueChanged<String> onPickAnchor;
+  final ValueChanged<String> onClearAnchor;
+  final ValueChanged<String> onOccasion;
+  final ValueChanged<double> onThreshold;
+  final VoidCallback onRecommend;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppColors.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: AppRadius.panel,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Pilih pakaian utama',
+            style: textTheme.labelLarge!.copyWith(
+              fontWeight: FontWeight.w600,
+              color: palette.ink,
             ),
-          ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pilih atasan, bawahan, atau keduanya.',
+            style: textTheme.labelMedium!.copyWith(
+              fontWeight: FontWeight.w400,
+              color: palette.inkMuted,
+            ),
+          ),
           const SizedBox(height: 8),
+          _SlotRow(
+            key: const ValueKey('recommendation-top'),
+            slot: 'Tops',
+            item: top,
+            optional: false,
+            onPick: () => onPickAnchor('Tops'),
+            onClear: () => onClearAnchor('Tops'),
+          ),
+          const SizedBox(height: 8),
+          _SlotRow(
+            key: const ValueKey('recommendation-bottom'),
+            slot: 'Bottoms',
+            item: bottom,
+            optional: false,
+            onPick: () => onPickAnchor('Bottoms'),
+            onClear: () => onClearAnchor('Bottoms'),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Acara',
+            style: textTheme.labelLarge!.copyWith(
+              fontWeight: FontWeight.w600,
+              color: palette.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          RadioGroup<String>(
+            groupValue: occasion,
+            onChanged: (value) {
+              if (value != null) onOccasion(value);
+            },
+            child: GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 2,
+              childAspectRatio: 2.4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (final option in RuleBasedRecommender.occasions)
+                  InkWell(
+                    onTap: () => onOccasion(option),
+                    borderRadius: AppRadius.chip,
+                    child: Row(
+                      children: [
+                        Radio<String>(
+                          value: option,
+                          fillColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? palette.action
+                                : palette.inkMuted,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            _occasionDisplayName(option),
+                            style: textTheme.labelMedium!.copyWith(
+                              color: palette.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Target Keserasian',
+            style: textTheme.labelLarge!.copyWith(
+              fontWeight: FontWeight.w600,
+              color: palette.ink,
+            ),
+          ),
+          Text(
+            'Minimal skor kecocokan warna, formalitas, dan acara.',
+            style: textTheme.labelMedium!.copyWith(
+              fontWeight: FontWeight.w400,
+              color: palette.inkMuted,
+            ),
+          ),
           Row(
             children: [
-              Text(
-                'Batas minimum',
-                style: textTheme.labelLarge!.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: palette.ink,
-                ),
-              ),
               Expanded(
                 child: Slider(
                   value: threshold,
@@ -436,88 +693,53 @@ class _ScoreCard extends StatelessWidget {
               ),
             ],
           ),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onRecommend,
+              // icon: const Icon(Icons.auto_awesome, size: 18),
+              label: const Text('Buat Kombinasi'),
+              style: FilledButton.styleFrom(
+                backgroundColor: palette.action,
+                foregroundColor: palette.onAction,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: AppRadius.chip,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Theme picker plus the one button that fills every slot for you.
-class _AutoFillBar extends StatelessWidget {
-  const _AutoFillBar({
-    required this.themes,
-    required this.theme,
-    required this.onTheme,
-    required this.onFill,
-  });
+String _occasionDisplayName(String value) =>
+    value == 'Smart-Casual' ? 'Smart Casual' : value;
 
-  final List<String> themes;
-  final String? theme;
-  final ValueChanged<String?> onTheme;
-  final VoidCallback onFill;
+class _SubscoreChip extends StatelessWidget {
+  const _SubscoreChip({required this.label, required this.value});
+
+  final String label;
+  final double value;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: AppRadius.panel,
+        color: palette.accentTint,
+        borderRadius: AppRadius.chip,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, size: 18, color: palette.actionInk),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Isi otomatis',
-                  style: textTheme.labelLarge!.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: palette.ink,
-                  ),
-                ),
-              ),
-              FilledButton.icon(
-                key: const ValueKey('autofill'),
-                onPressed: onFill,
-                icon: const Icon(Icons.shuffle, size: 16),
-                label: Text(
-                  'Isi Otomatis',
-                  style: textTheme.labelLarge!.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: palette.action,
-                  foregroundColor: palette.onAction,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: AppRadius.chip,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (themes.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final option in <String?>[null, ...themes])
-                  ChoiceChip(
-                    label: Text(option ?? 'Semua tema'),
-                    selected: theme == option,
-                    onSelected: (_) => onTheme(option),
-                  ),
-              ],
-            ),
-          ],
-        ],
+      child: Text(
+        '$label ${(value * 100).round()}%',
+        style: textTheme.labelMedium!.copyWith(
+          fontWeight: FontWeight.w600,
+          color: palette.ink,
+        ),
       ),
     );
   }
@@ -525,18 +747,27 @@ class _AutoFillBar extends StatelessWidget {
 
 class _SlotRow extends StatelessWidget {
   const _SlotRow({
+    super.key,
     required this.slot,
     required this.item,
     required this.optional,
-    required this.onPick,
+    this.locked = false,
+    this.hasGenerated = false,
+    this.emptyCompatible = false,
+    this.onPick,
     required this.onClear,
+    this.onRefresh,
   });
 
   final String slot;
   final WardrobeItem? item;
   final bool optional;
-  final VoidCallback onPick;
+  final bool locked;
+  final bool hasGenerated;
+  final bool emptyCompatible;
+  final VoidCallback? onPick;
   final VoidCallback onClear;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -562,7 +793,7 @@ class _SlotRow extends StatelessWidget {
                     ? Container(
                         color: palette.surfaceMuted,
                         child: Icon(
-                          Icons.add,
+                          onPick == null ? Icons.checkroom_outlined : Icons.add,
                           size: 18,
                           color: palette.inkMuted,
                         ),
@@ -579,7 +810,7 @@ class _SlotRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    slot + (optional ? ' · opsional' : ''),
+                    slot + (optional ? '' : ''),
                     style: textTheme.labelMedium!.copyWith(
                       fontWeight: FontWeight.w400,
                       color: palette.inkMuted,
@@ -587,7 +818,14 @@ class _SlotRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    chosen?.name ?? 'Pilih item',
+                    chosen?.name ??
+                        (onPick == null
+                            ? !hasGenerated
+                                  ? 'Belum dibuat'
+                                  : emptyCompatible
+                                  ? 'Slot dikosongkan'
+                                  : 'Tidak ada item yg cocok'
+                            : 'Pilih item'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.bodyMedium!.copyWith(
@@ -598,7 +836,37 @@ class _SlotRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (chosen != null)
+            if (chosen != null && locked)
+              Icon(Icons.lock_outline, size: 20, color: palette.inkMuted)
+            else if (chosen == null &&
+                onPick == null &&
+                hasGenerated &&
+                emptyCompatible)
+              IconButton(
+                tooltip: 'Refresh $slot',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh, size: 18),
+                color: palette.inkMuted,
+              )
+            else if (chosen != null && onPick == null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Refresh $slot',
+                    onPressed: onRefresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    color: palette.inkMuted,
+                  ),
+                  IconButton(
+                    tooltip: 'Hapus dari kombinasi',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.close, size: 18),
+                    color: palette.inkMuted,
+                  ),
+                ],
+              )
+            else if (chosen != null)
               IconButton(
                 tooltip: 'Hapus dari kombinasi',
                 onPressed: onClear,
@@ -608,130 +876,6 @@ class _SlotRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Shown only while the score is under the threshold.
-class _ImproveSection extends StatelessWidget {
-  const _ImproveSection({
-    required this.swaps,
-    required this.threshold,
-    required this.onApply,
-  });
-
-  final List<SwapSuggestion> swaps;
-  final double threshold;
-  final ValueChanged<SwapSuggestion> onApply;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = AppColors.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Rekomendasi Peningkatan',
-          style: textTheme.headlineSmall!.copyWith(
-            fontWeight: FontWeight.w700,
-            color: palette.ink,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Skor masih di bawah batas ${(threshold * 100).round()}%. '
-          'Ganti salah satu item:',
-          style: textTheme.labelMedium!.copyWith(
-            fontWeight: FontWeight.w400,
-            color: palette.inkMuted,
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final swap in swaps) ...[
-          GestureDetector(
-            onTap: () => onApply(swap),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.sheet,
-                borderRadius: AppRadius.field,
-                border: Border.all(color: palette.inkMuted),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: AppRadius.chip,
-                    child: SizedBox(
-                      width: 52,
-                      height: 52,
-                      child: PlaceholderImage(
-                        imagePath: swap.to.imagePath,
-                        icon: Icons.checkroom_outlined,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Ganti ${swap.from.name}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.labelMedium!.copyWith(
-                            fontWeight: FontWeight.w400,
-                            color: palette.inkMuted,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          swap.to.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodyMedium!.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: palette.ink,
-                          ),
-                        ),
-                        Text(
-                          '${swap.to.category} • ${swap.to.colorName}',
-                          style: textTheme.labelMedium!.copyWith(
-                            fontWeight: FontWeight.w400,
-                            color: palette.inkMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${swap.gainPercent}%',
-                        style: textTheme.titleLarge!.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: palette.ink,
-                        ),
-                      ),
-                      Text(
-                        'Terapkan',
-                        style: textTheme.labelMedium!.copyWith(
-                          fontWeight: FontWeight.w400,
-                          color: palette.inkMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-      ],
     );
   }
 }

@@ -96,6 +96,10 @@ class WardrobeItem {
   /// Dominant garment color, used for HSV color-harmony scoring.
   final Color color;
 
+  /// The `#RRGGBB` representation stored by `wardrobe_items.dominant_color`.
+  String get dominantColorHex =>
+      '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
   /// 1 = santai, 5 = formal. Compared against a partner item's level.
   final int formality;
 
@@ -131,10 +135,9 @@ class WardrobeItem {
   );
 }
 
-/// Folder under the app documents dir that holds a scanned garment's cutout
-/// PNG. The scanner writes here and the wardrobe service reads from here; when
-/// they disagreed (`garments` vs `cutouts`) every saved item pointed at a file
-/// that did not exist and the wardrobe showed only its attributes.
+/// Folder under the app documents dir used for temporary garment cutouts.
+/// Supabase stores image references separately; recommendation runs on the
+/// already-loaded local wardrobe and does not need image access.
 const wardrobeCutoutDirName = 'garments';
 
 /// Category slots a combination is built from.
