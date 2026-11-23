@@ -878,21 +878,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               showDialog(
                                 context: context,
                                 builder: (dialogContext) => AlertDialog(
+                                  backgroundColor: palette.sheet,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
                                   title: Text(
                                     isId
                                         ? 'Konfirmasi Keluar'
                                         : 'Confirm Log Out',
+                                    style: TextStyle(
+                                      color: palette.ink,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                   content: Text(
                                     isId
                                         ? 'Apakah Anda yakin ingin keluar dari akun?'
                                         : 'Are you sure you want to log out?',
+                                    style: TextStyle(color: palette.inkMuted),
                                   ),
                                   actions: [
                                     TextButton(
                                       onPressed: () =>
                                           Navigator.pop(dialogContext),
-                                      child: Text(isId ? 'Batal' : 'Cancel'),
+                                      child: Text(
+                                        isId ? 'Batal' : 'Cancel',
+                                        style: TextStyle(
+                                          color: palette.inkMuted,
+                                        ),
+                                      ),
                                     ),
                                     TextButton(
                                       onPressed: () async {
