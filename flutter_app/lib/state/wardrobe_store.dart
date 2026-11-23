@@ -98,6 +98,17 @@ Future<void> deleteWardrobeItem(String id) async {
   wardrobeItems.value = await _readAll(db);
 }
 
+/// Removes every row in [ids] with one statement, so a multi-select delete
+/// costs one write instead of one per garment.
+Future<void> deleteWardrobeItems(Iterable<String> ids) async {
+  final list = ids.toList();
+  if (list.isEmpty) return;
+  final db = _requireDb();
+  final marks = List.filled(list.length, '?').join(',');
+  await db.delete(_table, where: 'id IN ($marks)', whereArgs: list);
+  wardrobeItems.value = await _readAll(db);
+}
+
 Future<void> _open({
   DatabaseFactory? factory,
   String? path,

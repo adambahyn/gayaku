@@ -16,6 +16,7 @@ class PlaceholderImage extends StatelessWidget {
     required this.icon,
     this.fit = BoxFit.cover,
     this.color,
+    this.cacheWidth = 480,
   });
 
   final String imagePath;
@@ -23,6 +24,10 @@ class PlaceholderImage extends StatelessWidget {
   final IconData icon;
   final BoxFit fit;
   final Color? color;
+
+  /// Decode budget for network images: a 160 px tile must not decode a
+  /// 1024 px PNG. Pass null to decode at full size.
+  final int? cacheWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +45,7 @@ class PlaceholderImage extends StatelessWidget {
             Image.network(
               imagePath,
               fit: fit,
+              cacheWidth: cacheWidth,
               loadingBuilder: (context, child, progress) =>
                   progress == null ? child : const SizedBox.shrink(),
               errorBuilder: (_, _, _) => const SizedBox.shrink(),

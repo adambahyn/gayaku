@@ -145,7 +145,7 @@ uuid v4 generated on the device (`logic/ids.dart`), so the id in SQLite equals
    API keys* (older projects call it the **anon** key — same slot, same
    behaviour). That key is public by design; RLS is what protects the data.
    Never ship the `secret` / `service_role` key.
-2. Apply the migrations. Either paste all six files from `migrations/` into the
+2. Apply the migrations. Either paste every file from `migrations/` into the
    dashboard SQL editor in filename order, or use the CLI:
 
    ```bash

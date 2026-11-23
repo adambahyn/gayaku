@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -32,6 +34,9 @@ abstract class WardrobeService {
   Future<WardrobeItem> add(ScanResult scan, {String? name});
 
   Future<void> remove(String id);
+
+  /// Removes several garments in one request — the batch delete path.
+  Future<void> removeMany(List<String> ids);
 }
 
 /// Keeps items in memory for tests and for runs built without credentials.
@@ -72,10 +77,17 @@ class DemoWardrobeService implements WardrobeService {
   @override
   Future<void> remove(String id) async =>
       _items.removeWhere((item) => item.id == id);
+
+  @override
+  Future<void> removeMany(List<String> ids) async {
+    final drop = ids.toSet();
+    _items.removeWhere((item) => drop.contains(item.id));
+  }
 }
 
-/// Postgres and Supabase Storage. `wardrobe_items.image_url` is always the
-/// complete public URL of the corresponding object in `cutouts`.
+/// Postgres and Supabase Storage. `wardrobe_items.image_url` holds the object
+/// path inside `cutouts` (`<uid>/<file>.png`); the bucket is private, so the
+/// display URL is signed on read and refreshed on every sync.
 class SupabaseWardrobeService implements WardrobeService {
   SupabaseWardrobeService(this._client);
 
@@ -84,17 +96,35 @@ class SupabaseWardrobeService implements WardrobeService {
   static const _table = 'wardrobe_items';
   static const _dir = wardrobeCutoutDirName;
 
+  /// Columns the screens read; `select()` without them shipped every column
+  /// including ones no widget touches.
+  static const _columns =
+      'id,name,label,category,subcategory,brand,color_name,dominant_color,'
+      'formality,occasions,confidence,image_url';
+
+  /// How many garments one sync pulls. The screen renders from the SQLite
+  /// mirror, so this is a cache bound, not a page.
+  ///
+  /// ponytail: no cursor paging — add `.range()` plus store paging when an
+  /// account really owns more than this.
+  static const _syncLimit = 200;
+
   @override
-  Future<List<WardrobeItem>> items() async {
+  Future<List<WardrobeItem>> items({int limit = _syncLimit}) async {
     final rows = await _guard(
-      () => _client.from(_table).select().order('created_at', ascending: false),
+      () => _client
+          .from(_table)
+          .select(_columns)
+          .order('created_at', ascending: false)
+          .limit(limit),
     );
     final userId = _client.auth.currentUser?.id;
-    return Future.wait(
+    final restored = await Future.wait(
       rows.map(
         (row) => _restoreLegacyImage(Map<String, dynamic>.from(row), userId),
       ),
     );
+    return _withSignedUrls(restored);
   }
 
   @override
@@ -105,7 +135,7 @@ class SupabaseWardrobeService implements WardrobeService {
         'Sesi login tidak ditemukan. Silakan masuk ulang.',
       );
     }
-    final imageUrl = await _uploadImage(item.imagePath, userId);
+    final storagePath = await _uploadImage(item.imagePath, userId);
     final row = await _guard(
       () => _client
           .from(_table)
@@ -125,12 +155,12 @@ class SupabaseWardrobeService implements WardrobeService {
                 ? defaultOccasions(item.category)
                 : item.occasions,
             'confidence': item.confidence,
-            'image_url': imageUrl,
+            'image_url': storagePath,
           })
           .select()
           .single(),
     );
-    return _toItem(row);
+    return (await _withSignedUrls([_toItem(row)])).single;
   }
 
   @override
@@ -164,61 +194,119 @@ class SupabaseWardrobeService implements WardrobeService {
   }
 
   @override
-  Future<void> remove(String id) async {
-    final row = await _guard(
-      () => _client.from(_table).select('image_url').eq('id', id).maybeSingle(),
-    );
-    await _guard(() => _client.from(_table).delete().eq('id', id));
+  Future<void> remove(String id) => removeMany([id]);
 
-    final imageUrl = row?['image_url'] as String?;
-    final storagePath = _storagePathFromUrl(imageUrl);
-    if (storagePath != null) {
-      await _storageGuard(
-        () => _client.storage.from(_bucket).remove([storagePath]),
-      );
+  /// One select, one delete and one storage call for the whole selection: the
+  /// per-item loop this replaced cost three requests per garment.
+  @override
+  Future<void> removeMany(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final rows = await _guard(
+      () => _client.from(_table).select('image_url').inFilter('id', ids),
+    );
+    await _guard(() => _client.from(_table).delete().inFilter('id', ids));
+
+    final paths = <String>[];
+    for (final row in rows) {
+      final path = _storagePathOf(row['image_url'] as String?);
+      if (path != null) paths.add(path);
     }
+    if (paths.isEmpty) return;
+    await _storageGuard(() => _client.storage.from(_bucket).remove(paths));
   }
 
   static const _bucket = 'cutouts';
 
+  /// Uploads a local cutout and returns its object path inside the bucket.
   Future<String> _uploadImage(String imagePath, String userId) async {
-    final uri = Uri.tryParse(imagePath);
-    final isUrl =
-        uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
-    if (imagePath.isEmpty || isUrl) {
-      return imagePath;
-    }
+    if (imagePath.isEmpty) return '';
     final file = File(imagePath);
     if (!await file.exists()) {
+      // Already stored: an old public URL or a bare object path.
+      final path = _storagePathOf(imagePath);
+      if (path != null) return path;
       throw WardrobeException('File hasil scan tidak ditemukan: $imagePath');
     }
-    final fileName = _basename(imagePath);
-    final storagePath = '$userId/$fileName';
+    final storagePath = '$userId/${_basename(imagePath)}';
     try {
+      final bytes = await _shrink(file);
       await _client.storage
           .from(_bucket)
-          .upload(
+          .uploadBinary(
             storagePath,
-            file,
+            bytes,
             fileOptions: const sb.FileOptions(
               cacheControl: '3600',
               upsert: true,
               contentType: 'image/png',
             ),
           );
-      final publicUrl = _client.storage.from(_bucket).getPublicUrl(storagePath);
-      if (!publicUrl.startsWith('https://')) {
-        throw const WardrobeException(
-          'Supabase mengembalikan URL gambar yang tidak valid.',
-        );
-      }
-      return publicUrl;
+      return storagePath;
     } on sb.StorageException catch (e, stack) {
       debugPrint('Supabase Storage upload failed ($storagePath): ${e.message}');
       debugPrint('$stack');
       throw WardrobeException(_friendly(e.message));
     }
   }
+
+  /// Longest edge kept on upload; the grid decodes a tile per garment.
+  static const _maxImageEdge = 768;
+
+  Future<Uint8List> _shrink(File file) async {
+    final bytes = await file.readAsBytes();
+    try {
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: _maxImageEdge,
+        allowUpscaling: false,
+      );
+      final frame = await codec.getNextFrame();
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      frame.image.dispose();
+      return data?.buffer.asUint8List() ?? bytes;
+    } on Object catch (e) {
+      debugPrint('Cutout resize skipped: $e');
+      return bytes;
+    }
+  }
+
+  /// Signed display URLs for the rows that still point into the bucket. One
+  /// batch call per sync; a failure leaves the path in place (text still
+  /// shows) instead of failing the whole wardrobe.
+  Future<List<WardrobeItem>> _withSignedUrls(List<WardrobeItem> items) async {
+    final paths = <String>[];
+    for (final item in items) {
+      final path = _storagePathOf(item.imagePath);
+      if (path != null) paths.add(path);
+    }
+    if (paths.isEmpty) return items;
+    final signed = <String, String>{};
+    try {
+      final results = await _client.storage
+          .from(_bucket)
+          .createSignedUrlsResult(paths, _signedUrlTtl);
+      for (final result in results) {
+        // A path that could not be signed is skipped, not fatal: the row keeps
+        // its path and the tile falls back to the placeholder.
+        if (result case sb.SignedUrlSuccess(:final path, :final signedUrl)) {
+          if (signedUrl.isNotEmpty) signed[path] = signedUrl;
+        }
+      }
+    } on sb.StorageException catch (e) {
+      debugPrint('Supabase signed URLs failed: ${e.message}');
+    }
+    if (signed.isEmpty) return items;
+    return [
+      for (final item in items)
+        signed[_storagePathOf(item.imagePath)] == null
+            ? item
+            : item.copyWith(imagePath: signed[_storagePathOf(item.imagePath)]),
+    ];
+  }
+
+  /// Seven days: the mirror is rewritten on every sync, so an offline week is
+  /// the worst case before images fall back to the placeholder.
+  static const _signedUrlTtl = 60 * 60 * 24 * 7;
 
   /// Absolute path of a temporary cutout; used only before upload.
   Future<String> _cutoutDir() async {
@@ -305,6 +393,12 @@ class SupabaseWardrobeService implements WardrobeService {
     } on sb.PostgrestException catch (e) {
       debugPrint('Supabase database request failed: ${e.message}');
       throw WardrobeException(_friendly(e.message));
+    } on sb.AuthException catch (e) {
+      debugPrint('Supabase auth failed: ${e.message}');
+      throw WardrobeException(_friendly(e.message));
+    } on SocketException catch (e) {
+      debugPrint('Supabase unreachable: $e');
+      throw const WardrobeException(_offline);
     }
   }
 
@@ -315,9 +409,17 @@ class SupabaseWardrobeService implements WardrobeService {
       debugPrint('Supabase Storage request failed: ${e.message}');
       debugPrint('$stack');
       throw WardrobeException(_friendly(e.message));
+    } on SocketException catch (e) {
+      debugPrint('Supabase Storage unreachable: $e');
+      throw const WardrobeException(_offline);
     }
   }
 
+  static const _offline =
+      'Tidak ada koneksi. Perubahan belum tersimpan di server.';
+
+  /// The screen shows these strings as-is, so an unmatched Postgres message is
+  /// replaced by a generic one instead of leaking constraint and column names.
   static String _friendly(String message) {
     final lower = message.toLowerCase();
     if (lower.contains('row-level security') || lower.contains('violates')) {
@@ -327,8 +429,33 @@ class SupabaseWardrobeService implements WardrobeService {
     if (lower.contains('jwt') || lower.contains('expired')) {
       return 'Sesi habis, masuk ulang.';
     }
-    return message;
+    if (lower.contains('duplicate key')) {
+      return 'Item ini sudah ada di lemarimu.';
+    }
+    if (lower.contains('payload') || lower.contains('too large')) {
+      return 'Gambar terlalu besar untuk diunggah.';
+    }
+    if (lower.contains('failed host lookup') ||
+        lower.contains('socket') ||
+        lower.contains('timeout') ||
+        lower.contains('connection')) {
+      return _offline;
+    }
+    debugPrint('Unmapped Supabase error: $message');
+    return 'Permintaan ke server gagal. Coba lagi.';
   }
+}
+
+/// The object path inside `cutouts`, or null for a local file / empty value.
+String? _storagePathOf(String? value) {
+  if (value == null || value.isEmpty) return null;
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return _storagePathFromUrl(value);
+  }
+  if (value.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value)) {
+    return null;
+  }
+  return value;
 }
 
 String? _storagePathFromUrl(String? value) {
