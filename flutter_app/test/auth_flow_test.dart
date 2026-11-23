@@ -13,6 +13,13 @@ class _FailingAuthService implements AuthService {
   AuthUser? get currentUser => null;
 
   @override
+  Stream<AuthUser?> get onAuthStateChange => const Stream.empty();
+
+  @override
+  Future<void> signInWithGoogle() async =>
+      throw const AuthException('Gagal membuka login Google.');
+
+  @override
   Future<AuthUser> signIn({
     required String email,
     required String password,

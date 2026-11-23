@@ -528,7 +528,7 @@ void main() {
     );
     expect(
       find.text(
-        'Pastikan atasan (Tops) dan bawahan (Bottoms) terisi sebelum menyimpan',
+        'Atasan (Tops) dan Bawahan (Bottoms) Wajib Terisi',
       ),
       findsOneWidget,
     );

@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
 import '../widgets/note.dart';
 import '../widgets/placeholder_image.dart';
+import '../widgets/app_snackbar.dart';
 
 DateTime _mondayOf(DateTime date) {
   final day = DateTime(date.year, date.month, date.day);
@@ -133,6 +134,9 @@ class _WeeklyPlannerState extends State<WeeklyPlanner> {
     if (result == null || !mounted) return;
     try {
       await savePlannerEntry(result);
+      if (mounted) {
+        showSuccessSnackBar(context, 'Jadwal outfit berhasil disimpan');
+      }
     } catch (error) {
       _showBackendError(error);
     }
@@ -192,6 +196,9 @@ class _WeeklyPlannerState extends State<WeeklyPlanner> {
     if (shouldClear != true || !mounted) return;
     try {
       await deletePlannerEntry(date);
+      if (mounted) {
+        showSuccessSnackBar(context, 'Jadwal outfit berhasil dihapus');
+      }
     } catch (error) {
       _showBackendError(error);
     }

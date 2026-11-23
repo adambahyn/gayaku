@@ -9,6 +9,7 @@ import '../navigation.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/home_bottom_nav.dart';
+import '../widgets/app_snackbar.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -241,7 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _photoUrl = imageUrl;
           _isUploadingPhoto = false;
         });
-        _showSnackBar('Foto profil berhasil diperbarui!');
+        showSuccessSnackBar(context, 'Foto profil berhasil diperbarui!');
       }
     } catch (e) {
       if (mounted) {
@@ -418,7 +419,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       globalUserName.value = updated.displayName;
 
                       Navigator.pop(modalContext);
-                      _showSnackBar('Profil berhasil diperbarui!');
+                      showSuccessSnackBar(context, 'Profil berhasil diperbarui!');
                     } catch (_) {
                       if (!modalContext.mounted) return;
                       _showSnackBar('Gagal menyimpan profil.');
@@ -578,7 +579,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       await authService.updatePassword(newPassword);
                       if (!mounted || !modalContext.mounted) return;
                       Navigator.pop(modalContext);
-                      _showSnackBar(
+                      showSuccessSnackBar(
+                        context,
                         'Kata sandi berhasil diperbarui di database!',
                       );
                     } catch (e) {
@@ -666,6 +668,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           globalThemeMode.value = val
                               ? ThemeMode.dark
                               : ThemeMode.light;
+                          showSuccessSnackBar(
+                            context,
+                            isId ? 'Preferensi tema berhasil diubah' : 'Theme preference updated',
+                          );
                         },
                       ),
                       const Divider(),
@@ -698,6 +704,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         onTap: () {
                           globalLanguage.value = isId ? 'en' : 'id';
+                          showSuccessSnackBar(
+                            context,
+                            isId ? 'Language updated to English' : 'Bahasa berhasil diubah ke Bahasa Indonesia',
+                          );
                         },
                       ),
                       const SizedBox(height: 8),

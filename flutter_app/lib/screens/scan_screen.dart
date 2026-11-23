@@ -16,6 +16,7 @@ import '../state/wardrobe_store.dart';
 import '../state/wardrobe_sync.dart';
 import '../navigation.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_snackbar.dart';
 
 /// Runs the models over one photo. Injectable so widget tests can drive the
 /// screen without loading real `.tflite` files.
@@ -226,14 +227,14 @@ class _ScanScreenState extends State<ScanScreen> {
       // Inside the shell the scanner is a page, not a pushed route: popping it
       // would tear down the only route (black screen, and the next back press
       // leaves the app). Hand the user back to the wardrobe instead.
+      if (mounted) {
+        showSuccessSnackBar(context, '$label tersimpan di Wardrobe');
+      }
       if (navigator.canPop()) {
         navigator.pop();
       } else if (mounted) {
         openNavDestination(context, 1);
       }
-      messenger.showSnackBar(
-        SnackBar(content: Text('$label tersimpan di Wardrobe')),
-      );
     } on FileSystemException {
       messenger.showSnackBar(
         const SnackBar(content: Text('Gagal menyimpan gambar potongan.')),
