@@ -42,7 +42,10 @@ typedef _MenuChoice = ({
 class _HomeBottomNavState extends State<HomeBottomNav> {
   static List<({IconData icon, String label})> get _items => [
     (icon: Icons.home_outlined, label: isIndonesian ? 'Beranda' : 'Home'),
-    (icon: Icons.checkroom_outlined, label: isIndonesian ? 'Lemari' : 'Wardrobe'),
+    (
+      icon: Icons.checkroom_outlined,
+      label: isIndonesian ? 'Lemari' : 'Wardrobe',
+    ),
     (icon: Icons.qr_code_scanner, label: isIndonesian ? 'Pindai' : 'Scan'),
     (
       icon: Icons.calendar_month_outlined,

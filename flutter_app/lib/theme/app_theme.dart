@@ -267,12 +267,12 @@ bool get isIndonesian => globalLanguage.value == 'id';
 String wardrobeCategoryLabel(String category) {
   if (!isIndonesian) return category;
   return const {
-    'All Items': 'Semua',
-    'Tops': 'Atasan',
-    'Bottoms': 'Bawahan',
-    'Outerwear': 'Luaran',
-    'Shoes': 'Sepatu',
-    'Accessories': 'Aksesori',
-  }[category] ??
+        'All Items': 'Semua',
+        'Tops': 'Atasan',
+        'Bottoms': 'Bawahan',
+        'Outerwear': 'Luaran',
+        'Shoes': 'Sepatu',
+        'Accessories': 'Aksesori',
+      }[category] ??
       category;
 }

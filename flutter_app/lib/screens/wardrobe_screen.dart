@@ -111,7 +111,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       final count = _favoritesOnly
           ? outfits.where((outfit) => outfit.favorite).length
           : outfits.length;
-      return (isIndonesian ? 'Total $count kombinasi${_favoritesOnly ? ' favorit' : ''}' : 'Total $count combinations${_favoritesOnly ? ' favorited' : ''}');
+      return (isIndonesian
+          ? 'Total $count kombinasi${_favoritesOnly ? ' favorit' : ''}'
+          : 'Total $count combinations${_favoritesOnly ? ' favorited' : ''}');
     }
     final noun = _category == wardrobeCategories.first
         ? (isIndonesian ? 'item' : 'items')
@@ -120,7 +122,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       ...(_occasions.toList()..sort()).map(
         (occasion) => occasion.toLowerCase(),
       ),
-      if (_minFormality > 1) (isIndonesian ? 'formalitas $_minFormality' : 'formality $_minFormality'),
+      if (_minFormality > 1)
+        (isIndonesian
+            ? 'formalitas $_minFormality'
+            : 'formality $_minFormality'),
     ];
     final suffix = filters.isEmpty ? '' : ' ${filters.join(' ')}';
     return 'Total $itemCount $noun$suffix';
@@ -180,7 +185,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
           ),
         ),
         content: Text(
-          (isIndonesian ? '"${outfit.name}" akan dihapus dari daftar.' : '"${outfit.name}" will be removed from the list.'),
+          (isIndonesian
+              ? '"${outfit.name}" akan dihapus dari daftar.'
+              : '"${outfit.name}" will be removed from the list.'),
           style: textTheme.labelLarge!.copyWith(
             fontWeight: FontWeight.w500,
             color: palette.inkMuted,
@@ -235,7 +242,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   /// The message a failed call deserves: the service's own when it typed one.
   static String _message(Object error) => error is WardrobeException
       ? error.message
-      : (isIndonesian ? 'Gagal menghubungi server. Coba lagi.' : 'Could not reach the server. Try again.');
+      : (isIndonesian
+            ? 'Gagal menghubungi server. Coba lagi.'
+            : 'Could not reach the server. Try again.');
 
   void _toggle(WardrobeItem item) {
     setState(() {
@@ -287,7 +296,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       await saveWardrobeItem(edited);
       if (!mounted) return;
       _clearSelection();
-      showSuccessSnackBar(context, (isIndonesian ? 'Perubahan tersimpan' : 'Changes saved'));
+      showSuccessSnackBar(
+        context,
+        (isIndonesian ? 'Perubahan tersimpan' : 'Changes saved'),
+      );
     } on Object catch (e) {
       // Anything the service did not type — a socket error, a store that is
       // not open — must still reach the user instead of vanishing.
@@ -306,7 +318,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     if (free.isEmpty) {
       showNote(
         context,
-        (isIndonesian ? 'Item ini masih dipakai di kombinasi. Hapus kombinasinya dulu.' : 'This item is still used in a combination. Delete that combination first.'),
+        (isIndonesian
+            ? 'Item ini masih dipakai di kombinasi. Hapus kombinasinya dulu.'
+            : 'This item is still used in a combination. Delete that combination first.'),
       );
       return;
     }
@@ -318,7 +332,11 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: palette.sheet,
         title: Text(
-          free.length == 1 ? (isIndonesian ? 'Hapus baju?' : 'Delete garment?') : (isIndonesian ? 'Hapus ${free.length} baju?' : 'Delete ${free.length} garments?'),
+          free.length == 1
+              ? (isIndonesian ? 'Hapus baju?' : 'Delete garment?')
+              : (isIndonesian
+                    ? 'Hapus ${free.length} baju?'
+                    : 'Delete ${free.length} garments?'),
           style: textTheme.titleLarge!.copyWith(
             fontWeight: FontWeight.w600,
             color: palette.ink,
@@ -326,8 +344,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         ),
         content: Text(
           free.length == 1
-              ? (isIndonesian ? 'Item terpilih akan dihapus dari lemarimu.' : 'The selected items will be removed from your wardrobe.')
-              : (isIndonesian ? '${free.length} item terpilih akan dihapus dari lemarimu.' : '${free.length} selected items will be removed from your wardrobe.'),
+              ? (isIndonesian
+                    ? 'Item terpilih akan dihapus dari lemarimu.'
+                    : 'The selected items will be removed from your wardrobe.')
+              : (isIndonesian
+                    ? '${free.length} item terpilih akan dihapus dari lemarimu.'
+                    : '${free.length} selected items will be removed from your wardrobe.'),
           style: textTheme.labelLarge!.copyWith(
             fontWeight: FontWeight.w500,
             color: palette.inkMuted,
@@ -450,8 +472,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                                     ? () => openNavDestination(context, 2)
                                     : () => _openBuilder(),
                                 addTooltip: _tab == 0
-                                    ? (isIndonesian ? 'Tambah item' : 'Add item')
-                                    : (isIndonesian ? 'Buat Kombinasi' : 'New combination'),
+                                    ? (isIndonesian
+                                          ? 'Tambah item'
+                                          : 'Add item')
+                                    : (isIndonesian
+                                          ? 'Buat Kombinasi'
+                                          : 'New combination'),
                               ),
                             ),
                             ValueListenableBuilder<bool>(
@@ -541,7 +567,9 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Center(
         child: Text(
-          (isIndonesian ? 'Belum ada item di kategori ini.' : 'No items in this category yet.'),
+          (isIndonesian
+              ? 'Belum ada item di kategori ini.'
+              : 'No items in this category yet.'),
           textAlign: TextAlign.center,
           style: textTheme.bodyLarge!.copyWith(
             fontWeight: FontWeight.w400,
@@ -600,8 +628,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               child: Center(
                 child: Text(
                   _favoritesOnly
-                      ? (isIndonesian ? 'Belum ada favorit tersimpan.' : 'No favorites saved yet.')
-                      : (isIndonesian ? 'Belum ada kombinasi tersimpan.' : 'No combinations saved yet.'),
+                      ? (isIndonesian
+                            ? 'Belum ada favorit tersimpan.'
+                            : 'No favorites saved yet.')
+                      : (isIndonesian
+                            ? 'Belum ada kombinasi tersimpan.'
+                            : 'No combinations saved yet.'),
                   style: textTheme.bodyLarge!.copyWith(
                     fontWeight: FontWeight.w400,
                     color: palette.inkMuted,
@@ -743,7 +775,9 @@ class _OfflineBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              (isIndonesian ? 'Offline — menampilkan data terakhir di perangkat.' : 'Offline — showing the last data on this device.'),
+              (isIndonesian
+                  ? 'Offline — menampilkan data terakhir di perangkat.'
+                  : 'Offline — showing the last data on this device.'),
               style: textTheme.labelMedium!.copyWith(
                 fontWeight: FontWeight.w500,
                 color: palette.inkMuted,
@@ -795,8 +829,18 @@ class _TabToggle extends StatelessWidget {
           ),
           Row(
             children: [
-              _segment(palette, textTheme, (isIndonesian ? 'Katalog' : 'Catalog'), 0),
-              _segment(palette, textTheme, (isIndonesian ? 'Kombinasi' : 'Combinations'), 1),
+              _segment(
+                palette,
+                textTheme,
+                (isIndonesian ? 'Katalog' : 'Catalog'),
+                0,
+              ),
+              _segment(
+                palette,
+                textTheme,
+                (isIndonesian ? 'Kombinasi' : 'Combinations'),
+                1,
+              ),
             ],
           ),
         ],
@@ -883,7 +927,9 @@ class _SavedOutfitCard extends StatelessWidget {
               ),
               IconButton(
                 tooltip: outfit.favorite
-                    ? (isIndonesian ? 'Hapus dari favorit' : 'Remove from favorites')
+                    ? (isIndonesian
+                          ? 'Hapus dari favorit'
+                          : 'Remove from favorites')
                     : (isIndonesian ? 'Tandai favorit' : 'Mark as favorite'),
                 onPressed: onToggleFavorite,
                 icon: Icon(
@@ -909,7 +955,9 @@ class _SavedOutfitCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton(
-                tooltip: (isIndonesian ? 'Hapus kombinasi' : 'Delete combination'),
+                tooltip: (isIndonesian
+                    ? 'Hapus kombinasi'
+                    : 'Delete combination'),
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline, size: 18),
                 color: palette.ink,
@@ -985,8 +1033,12 @@ class _SavedOutfitCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       meets
-                          ? (isIndonesian ? 'Memenuhi batas $threshold%' : 'Meets the $threshold% threshold')
-                          : (isIndonesian ? 'Di bawah batas $threshold%' : 'Below the $threshold% threshold'),
+                          ? (isIndonesian
+                                ? 'Memenuhi batas $threshold%'
+                                : 'Meets the $threshold% threshold')
+                          : (isIndonesian
+                                ? 'Di bawah batas $threshold%'
+                                : 'Below the $threshold% threshold'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.labelMedium!.copyWith(
@@ -1076,7 +1128,9 @@ class _SearchRowState extends State<_SearchRow> {
                     decoration: InputDecoration(
                       isCollapsed: true,
                       border: InputBorder.none,
-                      hintText: (isIndonesian ? 'Cari pakaianmu...' : 'Search your clothes...'),
+                      hintText: (isIndonesian
+                          ? 'Cari pakaianmu...'
+                          : 'Search your clothes...'),
                       hintStyle: textTheme.labelLarge!.copyWith(
                         fontWeight: FontWeight.w500,
                         color: palette.inkMuted,
@@ -1091,7 +1145,9 @@ class _SearchRowState extends State<_SearchRow> {
                       ? const SizedBox.shrink()
                       : IconButton(
                           key: const ValueKey('clear'),
-                          tooltip: (isIndonesian ? 'Hapus pencarian' : 'Clear search'),
+                          tooltip: (isIndonesian
+                              ? 'Hapus pencarian'
+                              : 'Clear search'),
                           onPressed: () {
                             widget.controller.clear();
                             widget.onQuery('');
@@ -1406,7 +1462,11 @@ class _SelectionBar extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             key: const ValueKey('selection-delete'),
-            tooltip: count == 1 ? (isIndonesian ? 'Hapus baju' : 'Delete garment') : (isIndonesian ? 'Hapus $count baju' : 'Delete $count garments'),
+            tooltip: count == 1
+                ? (isIndonesian ? 'Hapus baju' : 'Delete garment')
+                : (isIndonesian
+                      ? 'Hapus $count baju'
+                      : 'Delete $count garments'),
             onPressed: onDelete,
             icon: const Icon(Icons.delete_outline, size: 20),
             color: palette.ink,
@@ -1492,7 +1552,11 @@ class _ItemPreviewSheet extends StatelessWidget {
               runSpacing: 8,
               children: [
                 if (item.colorName.isNotEmpty) _Tag(item.colorName),
-                _Tag((isIndonesian ? 'Formalitas ${item.formality}/5' : 'Formality ${item.formality}/5')),
+                _Tag(
+                  (isIndonesian
+                      ? 'Formalitas ${item.formality}/5'
+                      : 'Formality ${item.formality}/5'),
+                ),
                 for (final occasion in item.occasions) _Tag(occasion),
               ],
             ),
@@ -1571,7 +1635,11 @@ class _ItemPreviewSheet extends StatelessWidget {
                 onPressed: () =>
                     Navigator.of(context).pop(_ItemAction.selectMore),
                 child: Text(
-                  single ? (isIndonesian ? 'Pilih item lain' : 'Pick another item') : (isIndonesian ? 'Lanjut pilih item lain' : 'Continue picking another item'),
+                  single
+                      ? (isIndonesian ? 'Pilih item lain' : 'Pick another item')
+                      : (isIndonesian
+                            ? 'Lanjut pilih item lain'
+                            : 'Continue picking another item'),
                   style: textTheme.labelLarge!.copyWith(
                     fontWeight: FontWeight.w600,
                     color: palette.inkMuted,

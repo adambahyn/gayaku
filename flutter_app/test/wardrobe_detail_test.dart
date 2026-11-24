@@ -152,7 +152,10 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: WardrobeItemDetailScreen(item: item, catalog: const [item, shoes]),
+        home: WardrobeItemDetailScreen(
+          item: item,
+          catalog: const [item, shoes],
+        ),
       ),
     );
     await tester.pumpAndSettle();
