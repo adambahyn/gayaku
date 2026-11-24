@@ -638,17 +638,62 @@ class _CombineButton extends StatelessWidget {
 
   /// Stores the base item plus its recommended partners as a saved combination.
   Future<void> _save(BuildContext context) async {
+    // Same rules as the outfit builder: overall score must meet the threshold
+    // and the name is asked for, not auto-generated.
+    final outfit = [item, ...matches.map((m) => m.item)];
+    final score = outfitScore(outfit);
+    const threshold = 0.6;
     if (matches.isEmpty) {
       showNote(context, 'Belum ada item untuk dikombinasikan');
       return;
     }
+    final hasTop = outfit.any((i) => i.category == 'Tops');
+    final hasBottom = outfit.any((i) => i.category == 'Bottoms');
+    if (!hasTop || !hasBottom) {
+      showNote(
+        context,
+        'Pastikan atasan (Tops) dan bawahan (Bottoms) terisi sebelum menyimpan',
+      );
+      return;
+    }
+    if (score < threshold) {
+      showNote(context, 'Skor kombinasi belum memenuhi batas minimum');
+      return;
+    }
+    var enteredName = 'Kombinasi ${item.name}';
+    final chosenName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nama Kombinasi'),
+        content: TextFormField(
+          initialValue: enteredName,
+          autofocus: true,
+          onChanged: (value) => enteredName = value,
+          decoration: const InputDecoration(
+            hintText: 'Nama kombinasi, mis. Kuliah Senin',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(enteredName),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    if (chosenName == null) return;
+    final name = chosenName.trim();
     try {
       await saveOutfit(
         SavedOutfit(
           id: newOutfitId(),
-          name: 'Setelan ${item.name}',
-          itemIds: [item.id, ...matches.map((m) => m.item.id)],
-          threshold: 0.80,
+          name: name.isEmpty ? 'Kombinasi ${item.name}' : name,
+          itemIds: outfit.map((i) => i.id).toList(),
+          threshold: threshold,
         ),
       );
       if (context.mounted) {

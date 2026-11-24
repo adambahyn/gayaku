@@ -37,6 +37,27 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
+  testWidgets('WardrobeScreen follows the language preference', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    addTearDown(() => globalLanguage.value = 'id');
+
+    await tester.pumpWidget(const MaterialApp(home: WardrobeScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Lemari'), findsWidgets);
+    expect(find.text('Total 9 item'), findsOneWidget);
+
+    globalLanguage.value = 'en';
+    await tester.pumpAndSettle();
+    expect(find.text('Wardrobe'), findsWidgets);
+    expect(find.text('Total 9 items'), findsOneWidget);
+    expect(find.text('Atasan • Zara'), findsNothing);
+    expect(find.text('Tops • Zara'), findsOneWidget);
+  });
+
   testWidgets('WardrobeScreen shows catalog and filters by chip', (
     WidgetTester tester,
   ) async {
@@ -47,22 +68,22 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: WardrobeScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Wardrobe'), findsWidgets);
-    expect(find.text('Total 9 items'), findsOneWidget);
+    expect(find.text('Lemari'), findsWidgets);
+    expect(find.text('Total 9 item'), findsOneWidget);
     expect(find.text('Silk Blouse'), findsOneWidget);
-    expect(find.text('Tops • Zara'), findsOneWidget);
+    expect(find.text('Atasan • Zara'), findsOneWidget);
 
     // Categories are inside the filter sheet now, not a chip row.
     await tester.tap(find.byTooltip('Filter'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Bottoms'));
+    await tester.tap(find.text('Bawahan'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Terapkan'));
     await tester.pumpAndSettle();
 
     expect(find.text('Straight Leg Jeans'), findsOneWidget);
     expect(find.text('Silk Blouse'), findsNothing);
-    expect(find.textContaining(RegExp(r'^Total \d+ bottoms$')), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^Total \d+ bawahan$')), findsOneWidget);
   });
 
   testWidgets('WardrobeScreen switches tabs, searches and filters', (
@@ -113,7 +134,7 @@ void main() {
     expect(find.text('Classic Sneakers'), findsNothing);
     // An active filter is named in the subtitle, not just counted.
     expect(
-      find.textContaining(RegExp(r'^Total \d+ items formal$')),
+      find.textContaining(RegExp(r'^Total \d+ item formal$')),
       findsOneWidget,
     );
   });

@@ -255,3 +255,24 @@ final ValueNotifier<String> globalLanguage = ValueNotifier<String>('id');
 final ValueNotifier<bool> globalNotificationsEnabled = ValueNotifier<bool>(
   true,
 );
+
+/// True when the active UI language is Indonesian. Screens read this
+/// instead of comparing the language code themselves.
+bool get isIndonesian => globalLanguage.value == 'id';
+
+/// Localised label for a wardrobe category.
+///
+/// The database keeps the English values, so only the label the user reads
+/// is translated; filters and saved items keep matching on the stored value.
+String wardrobeCategoryLabel(String category) {
+  if (!isIndonesian) return category;
+  return const {
+    'All Items': 'Semua',
+    'Tops': 'Atasan',
+    'Bottoms': 'Bawahan',
+    'Outerwear': 'Luaran',
+    'Shoes': 'Sepatu',
+    'Accessories': 'Aksesori',
+  }[category] ??
+      category;
+}

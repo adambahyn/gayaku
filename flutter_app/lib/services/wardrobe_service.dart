@@ -136,12 +136,12 @@ class SupabaseWardrobeService implements WardrobeService {
       );
     }
     final storagePath = await _uploadImage(item.imagePath, userId);
+    // Edit of an existing row updates in place; insert with the id would hit
+    // the primary key and surface as a misleading "not allowed" message.
     final row = await _guard(
       () => _client
           .from(_table)
-          .insert({
-            // Same id on the device and in Postgres (uuid v4), so the cached
-            // row and its cloud row never drift.
+          .upsert({
             if (item.id.isNotEmpty) 'id': item.id,
             'name': item.name,
             'label': item.label.isEmpty ? (item.subcategory ?? '') : item.label,
@@ -156,7 +156,7 @@ class SupabaseWardrobeService implements WardrobeService {
                 : item.occasions,
             'confidence': item.confidence,
             'image_url': storagePath,
-          })
+          }, onConflict: 'id')
           .select()
           .single(),
     );

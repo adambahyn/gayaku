@@ -40,24 +40,27 @@ typedef _MenuChoice = ({
 });
 
 class _HomeBottomNavState extends State<HomeBottomNav> {
-  static const _items = <({IconData icon, String label})>[
-    (icon: Icons.home_outlined, label: 'Home'),
-    (icon: Icons.checkroom_outlined, label: 'Wardrobe'),
-    (icon: Icons.qr_code_scanner, label: 'Scan'),
-    (icon: Icons.calendar_month_outlined, label: 'Planner'),
-    (icon: Icons.person_outline, label: 'Profile'),
+  static List<({IconData icon, String label})> get _items => [
+    (icon: Icons.home_outlined, label: isIndonesian ? 'Beranda' : 'Home'),
+    (icon: Icons.checkroom_outlined, label: isIndonesian ? 'Lemari' : 'Wardrobe'),
+    (icon: Icons.qr_code_scanner, label: isIndonesian ? 'Pindai' : 'Scan'),
+    (
+      icon: Icons.calendar_month_outlined,
+      label: isIndonesian ? 'Jadwal' : 'Planner',
+    ),
+    (icon: Icons.person_outline, label: isIndonesian ? 'Profil' : 'Profile'),
   ];
 
-  static const _choices = <_MenuChoice>[
+  static List<_MenuChoice> get _choices => [
     (
       icon: Icons.style_outlined,
-      label: 'Kombinasi',
+      label: isIndonesian ? 'Kombinasi' : 'Combinations',
       tab: 1,
       favoritesOnly: false,
     ),
     (
       icon: Icons.favorite_border,
-      label: 'Favorit',
+      label: isIndonesian ? 'Favorit' : 'Favorites',
       tab: 1,
       favoritesOnly: true,
     ),
@@ -342,16 +345,22 @@ class _NavButton extends StatelessWidget {
           children: [
             Icon(icon, size: 22, color: color),
             const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  height: 15 / 11,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: color,
+            // The label box is pinned to the text height so a longer or
+            // shorter word never changes the bar height: the pill must sit
+            // in the same place on every page.
+            SizedBox(
+              height: 15,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    height: 15 / 11,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: color,
+                  ),
                 ),
               ),
             ),

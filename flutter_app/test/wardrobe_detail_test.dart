@@ -102,6 +102,71 @@ void main() {
     expect(find.textContaining('Masih dipakai di 1 kombinasi'), findsOneWidget);
   });
 
+  testWidgets('combining from the detail page asks for a name and saves', (
+    tester,
+  ) async {
+    const bottom = WardrobeItem(
+      id: 'item-2',
+      name: 'Chino Krem',
+      category: 'Bottoms',
+      imagePath: '',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WardrobeItemDetailScreen(
+          item: item,
+          catalog: const [item, bottom],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Simpan Kombinasi'));
+    await tester.pump();
+    await tester.tap(find.text('Simpan Kombinasi'));
+    // The name field's cursor blinks forever, so pumpAndSettle would hang.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Nama Kombinasi'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Kuliah Senin');
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Simpan'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await settleRealAsync();
+    });
+
+    final saved = savedOutfits.value.single;
+    expect(saved.name, 'Kuliah Senin');
+    expect(saved.threshold, 0.6);
+    expect(saved.itemIds, containsAll(['item-1', 'item-2']));
+  });
+
+  testWidgets('combining without a bottom piece is refused', (tester) async {
+    const shoes = WardrobeItem(
+      id: 'item-3',
+      name: 'Sneakers Putih',
+      category: 'Shoes',
+      imagePath: '',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WardrobeItemDetailScreen(item: item, catalog: const [item, shoes]),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Simpan Kombinasi'));
+    await tester.pump();
+    await tester.tap(find.text('Simpan Kombinasi'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.textContaining('Tops'), findsWidgets);
+    expect(savedOutfits.value, isEmpty);
+  });
+
   testWidgets('the detail page says whether the item is combined', (
     tester,
   ) async {

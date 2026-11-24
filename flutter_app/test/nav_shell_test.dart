@@ -41,7 +41,7 @@ void main() {
 
     final restingBar = tester.getRect(find.byType(HomeBottomNav));
 
-    await tester.tap(find.text('Wardrobe'));
+    await tester.tap(find.text('Lemari'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
 
@@ -73,11 +73,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: NavShell()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Wardrobe'));
+    await tester.tap(find.text('Lemari'));
     await tester.pumpAndSettle();
 
     expect(find.text('Katalog'), findsOneWidget);
-    expect(find.text('Total ${wardrobeFixture.length} items'), findsOneWidget);
+    expect(find.text('Total ${wardrobeFixture.length} item'), findsOneWidget);
   });
 
   testWidgets('holding the handle drops a menu out of the bar', (tester) async {
@@ -86,7 +86,7 @@ void main() {
 
     final barTop = tester.getRect(find.byType(HomeBottomNav)).top;
     final gesture = await tester.startGesture(
-      tester.getCenter(find.text('Wardrobe')),
+      tester.getCenter(find.text('Lemari')),
     );
     // Shorter than the platform's 500 ms, so a short hold is enough.
     await tester.pump(const Duration(milliseconds: 300));
@@ -113,7 +113,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final gesture = await tester.startGesture(
-      tester.getCenter(find.text('Wardrobe')),
+      tester.getCenter(find.text('Lemari')),
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Kombinasi'), findsOneWidget);
@@ -124,6 +124,6 @@ void main() {
     // The menu is gone and the tap intent won: the catalog, not combinations.
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.text('Katalog'), findsOneWidget);
-    expect(find.text('Total ${wardrobeFixture.length} items'), findsOneWidget);
+    expect(find.text('Total ${wardrobeFixture.length} item'), findsOneWidget);
   });
 }

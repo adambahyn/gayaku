@@ -112,8 +112,8 @@ class WardrobeItemCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             item.brand.isEmpty
-                ? item.category
-                : '${item.category} • ${item.brand}',
+                ? wardrobeCategoryLabel(item.category)
+                : '${wardrobeCategoryLabel(item.category)} • ${item.brand}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelMedium!.copyWith(
@@ -129,7 +129,7 @@ class WardrobeItemCard extends StatelessWidget {
     return Semantics(
       label: [
         item.name,
-        item.category,
+        wardrobeCategoryLabel(item.category),
         if (item.brand.isNotEmpty) item.brand,
         if (selected) 'dipilih',
       ].join(', '),
